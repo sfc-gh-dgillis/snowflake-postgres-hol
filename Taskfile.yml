@@ -1,0 +1,373 @@
+version: '3'
+
+includes:
+  validate-prerequisites: ./tasks/validate-prerequisites/validate-prerequisite-tasks.yml
+  snow-cli:
+    taskfile: ./tasks/snow-cli/snowcli-tasks.yml
+    dir: ./tasks/snow-cli
+  pg-cli:
+    taskfile: ./tasks/pg-cli/pgcli-tasks.yml
+    dir: ./tasks/pg-cli
+  lab:
+    taskfile: ./tasks/lab/lab-tasks.yml
+    dir: ./tasks/lab
+
+env:
+  ENV_DIR: .env
+
+dotenv: ['{{ .ENV_DIR }}/{{ .DOTENV_FILENAME | default "mirror.env" }}']
+
+vars:
+  ENV_FILE: '{{ .ENV_DIR }}/{{ .DOTENV_FILENAME | default "mirror.env" }}'
+  # Routing must agree with the environment the commands see: a shell
+  # override (POSTGRES_INSTANCE_MODE=existing task demo-up) wins, then the env
+  # file, then "create". `sh:` vars only see the shell environment, so read the
+  # env file explicitly when the shell does not set the mode.
+  INSTANCE_MODE:
+    sh: |
+      if [ -n "${POSTGRES_INSTANCE_MODE:-}" ]; then echo "$POSTGRES_INSTANCE_MODE"; exit 0; fi
+      sed -n -E "s/^[[:space:]]*POSTGRES_INSTANCE_MODE[[:space:]]*=[[:space:]]*[\"']?([A-Za-z]+).*/\1/p" "{{.ENV_FILE}}" 2>/dev/null | tail -1 | grep . || echo create
+
+tasks:
+
+  default:
+    desc: Lists the available tasks.
+    silent: true
+    cmds:
+      - task --list
+
+  validate-prerequisites:
+    desc: Checks the env file, snow CLI and its connection, psql 16+, and Python 3.9+.
+    cmds:
+      - task: validate-prerequisites:all
+        vars:
+          ENV_FILE: '{{.ENV_FILE}}'
+
+  # ------------------------------------------------------------------
+  # Setup
+  # ------------------------------------------------------------------
+
+  demo-up:
+    desc: Provisions Postgres (routes by POSTGRES_INSTANCE_MODE), seeds the IoT tables, and deploys the notebook.
+    cmds:
+      - task: validate-prerequisites
+      - task: infrastructure-up-{{.INSTANCE_MODE}}
+      - task: pg-cli:check-connection
+      - task: pg-cli:setup
+      - task: notebook-up
+      - task: banner
+        vars:
+          TITLE: 'Setup complete: the IoT tables are live in Postgres.'
+          TEXT: 'Next: task lab-1-create-mirror  (and open the notebook link above in Snowsight)'
+
+  infrastructure-up:
+    desc: Provisions the Postgres instance and Snowflake lab objects only (routes by POSTGRES_INSTANCE_MODE).
+    cmds:
+      - task: validate-prerequisites
+      - task: infrastructure-up-{{.INSTANCE_MODE}}
+
+  infrastructure-up-create:
+    desc: Creates the lab objects, a POSTGRES_INGRESS network policy for your IP, and a new Postgres instance.
+    internal: true
+    cmds:
+      - task: snow-cli:run-init
+      - task: snow-cli:apply-postgres-network-policy
+      - task: snow-cli:pg-instance-create
+
+  infrastructure-up-existing:
+    desc: Creates the lab objects and attaches to a Postgres instance you already own.
+    internal: true
+    cmds:
+      - task: snow-cli:run-init
+      - task: snow-cli:pg-instance-attach
+
+  notebook-up:
+    desc: Generates the companion notebook from its template, deploys it, and prints its URL.
+    internal: true
+    cmds:
+      - task: snow-cli:generate-notebook
+      - task: snow-cli:deploy-notebook
+      - task: snow-cli:notebook-url
+
+  # ------------------------------------------------------------------
+  # Lab steps (run in order)
+  # ------------------------------------------------------------------
+
+  lab-1-create-mirror:
+    desc: 'Lab 1: grants, pre-flight checks, CREATE_MIRROR, initial snapshot, confirm the data.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 1 - Create the mirror'
+          TEXT: 'One procedure call replicates devices, sensors and readings into Snowflake.'
+      - task: pg-cli:preflight
+      - task: lab:grant-mirror-admin
+      - task: snow-cli:mirror-grants
+      - task: lab:preflight
+      - task: lab:create-mirror
+      - task: lab:wait-replicating
+        vars:
+          TIMEOUT: '900'
+      - task: snow-cli:grant-analyst-read
+      - task: lab:compare
+        vars:
+          WAIT: 'true'
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/1-confirm_data.sql
+      - task: pg-cli:inspect-mirror-objects
+
+  lab-2-add-data:
+    desc: 'Lab 2: insert 500 readings in Postgres; watch $live, then the target table, catch up.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 2 - Add more data and monitor sync'
+          TEXT: 'Watch $live pick up the rows within ~30s; READINGS follows on the next apply run.'
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/2-add_readings.sql
+      - task: lab:wait-count
+        vars:
+          TABLE: readings
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/2-verify_sync.sql
+
+  lab-3-schema-changes:
+    desc: 'Lab 3: add a column and rename another in Postgres; the mirror applies the DDL.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 3 - Schema changes through the mirror'
+          TEXT: 'ADD COLUMN status and RENAME location TO site_location, with no mirror changes.'
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/3-schema_changes.sql
+      - task: lab:wait-columns
+        vars:
+          TABLE: devices
+          PRESENT: STATUS,SITE_LOCATION
+          ABSENT: LOCATION
+      - task: lab:wait-replicating
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/3-verify_schema.sql
+
+  lab-4-deletes:
+    desc: 'Lab 4: delete readings older than 12 hours; the deletes replicate.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 4 - Deletes'
+          TEXT: 'Deleted rows leave the target table; READINGS$changes keeps a record of them.'
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/4-deletes.sql
+      - task: lab:wait-count
+        vars:
+          TABLE: readings
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/4-verify_deletes.sql
+
+  lab-5-live-and-changes:
+    desc: 'Lab 5: low-latency reads with $live and the 7-day change feed with $changes.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 5 - $live and $changes'
+          TEXT: 'A new device shows up in DEVICES$live before the DEVICES table is updated.'
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/5-live_insert.sql
+      - task: lab:wait-live
+        vars:
+          TABLE: devices
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/5-live_and_changes.sql
+
+  lab-6-operate-mirror:
+    desc: 'Lab 6: ALTER_MIRROR (interval, add a table), SUSPEND/RESUME, REFRESH_MIRROR, monitoring.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 6 - Operate the mirror'
+          TEXT: 'Change the refresh interval, add a new table, pause and resume apply, and monitor.'
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/001-alter_refresh_interval.sql
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/create_maintenance_events.sql
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/002-add_table.sql
+      - task: lab:wait-replicating
+        vars:
+          TABLES: devices,sensors,readings,maintenance_events
+      - task: lab:compare
+        vars:
+          TABLES: devices,sensors,readings,maintenance_events
+          WAIT: 'true'
+      - task: banner
+        vars:
+          TITLE: 'Lab 6 - Suspend the mirror, then write to Postgres'
+          TEXT: 'Postgres keeps capturing changes while apply is paused; nothing is lost.'
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/003-suspend.sql
+      - task: pg-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/insert_while_suspended.sql
+      - task: lab:observe
+        vars:
+          TABLE: readings
+          SECONDS: '90'
+      - task: banner
+        vars:
+          TITLE: 'Lab 6 - Resume the mirror and apply now'
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/004-resume_and_refresh.sql
+      - task: lab:wait-count
+        vars:
+          TABLE: readings
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/005-restore_refresh_interval.sql
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/monitoring.sql
+
+  lab-7-analytics:
+    desc: 'Lab 7: dynamic table, semantic view, and Cortex Agent on the mirrored data.'
+    cmds:
+      - task: banner
+        vars:
+          TITLE: 'Lab 7 - Analytics on mirrored data'
+          TEXT: 'Mirrored tables are ordinary Snowflake tables: build pipelines and AI on them directly.'
+      - task: snow-cli:sort-and-process-sql-folder
+        vars:
+          SQL_SORT_PROCESS_DIR: sql/analytics
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/lab/7-verify_analytics.sql
+      - task: banner
+        vars:
+          TITLE: 'Ask the agent in Snowsight: AI & ML > Agents'
+          TEXT: 'Which site had the highest average temperature in the last 12 hours?'
+
+  lab-all:
+    desc: Runs lab-1 through lab-7 in order (presenter dry run / smoke test).
+    cmds:
+      - task: lab-1-create-mirror
+      - task: lab-2-add-data
+      - task: lab-3-schema-changes
+      - task: lab-4-deletes
+      - task: lab-5-live-and-changes
+      - task: lab-6-operate-mirror
+      - task: lab-7-analytics
+
+  # ------------------------------------------------------------------
+  # Utilities
+  # ------------------------------------------------------------------
+
+  stream-readings:
+    desc: 'Load generator: streams readings into Postgres (STREAM_* settings). Watch them arrive in Snowflake.'
+    cmds:
+      - task: pg-cli:stream-readings
+
+  mirror-status:
+    desc: Shows mirror health - status, lag, errors, table states, recent apply runs.
+    cmds:
+      - task: lab:status
+
+  compare:
+    desc: Compares row counts in Postgres, the Snowflake target tables, and $live views.
+    cmds:
+      - task: lab:compare
+
+  mirror-refresh:
+    desc: Applies pending changes now (REFRESH_MIRROR) instead of waiting for the refresh interval.
+    cmds:
+      - task: lab:refresh
+
+  mirror-resume:
+    desc: Resumes a suspended mirror and applies pending changes (e.g. if lab-6 was interrupted).
+    cmds:
+      - task: snow-cli:run-sql-file
+        vars:
+          SQL_FILE: sql/ops/004-resume_and_refresh.sql
+
+  pg-shell:
+    desc: Opens an interactive psql session on the lab database.
+    cmds:
+      - task: pg-cli:shell
+
+  pg-instance-info:
+    desc: Shows the Postgres instance state, owner, size, and host.
+    cmds:
+      - task: snow-cli:pg-instance-info
+
+  pg-allow-my-ip:
+    desc: 'Create mode: points the Postgres ingress rule at your current IP (or PG_ALLOWED_CIDR).'
+    preconditions:
+      - sh: '[ "{{.INSTANCE_MODE}}" = "create" ]'
+        msg: 'pg-allow-my-ip manages the lab network policy in create mode only. In existing mode, update the network policy on your own instance.'
+    cmds:
+      - task: snow-cli:apply-postgres-network-policy
+
+  pg-reset-access:
+    desc: Rotates the Postgres password for PG_USER and saves it to ~/.pgpass (never displayed).
+    prompt: This rotates the Postgres password for PG_USER. Other clients using the old password will stop working. Continue?
+    cmds:
+      - task: snow-cli:pg-instance-reset-access
+
+  # ------------------------------------------------------------------
+  # Teardown
+  # ------------------------------------------------------------------
+
+  demo-teardown:
+    desc: Tears down the lab (routes by POSTGRES_INSTANCE_MODE).
+    prompt: This drops the mirror, its target database, and the lab database (create mode also drops the Postgres instance). Continue?
+    cmds:
+      - task: validate-prerequisites:env
+        vars:
+          ENV_FILE: '{{.ENV_FILE}}'
+      - task: demo-teardown-{{.INSTANCE_MODE}}
+      - task: banner
+        vars:
+          TITLE: 'Teardown complete.'
+          TEXT: 'Target database names can never be reused: bump MIRROR_TARGET_DATABASE_NAME before the next demo-up.'
+
+  demo-teardown-create:
+    desc: Drops the mirror, the Postgres instance, the network policy, the lab objects, and local connection entries.
+    internal: true
+    cmds:
+      - task: lab:drop-mirror
+      - task: snow-cli:pg-instance-drop
+      - task: snow-cli:drop-network-policy
+      - task: snow-cli:drop-lab-objects
+      - task: snow-cli:pg-instance-forget
+
+  demo-teardown-existing:
+    desc: Drops the mirror, the lab's Postgres tables, and the lab objects; keeps your instance and connection.
+    internal: true
+    cmds:
+      - task: lab:drop-mirror
+      - task: pg-cli:drop-lab-tables
+      - task: snow-cli:drop-lab-objects
+
+  banner:
+    internal: true
+    silent: true
+    cmds:
+      # Single quotes: titles mention $live / $changes, which the shell must not expand
+      - |
+        echo ''
+        echo '════════════════════════════════════════════════════════════════════════'
+        echo '  {{.TITLE}}'
+        {{if .TEXT}}echo '  {{.TEXT}}'{{end}}
+        echo '════════════════════════════════════════════════════════════════════════'

@@ -1,0 +1,13 @@
+definition_version: 2
+# Values for <% ctx.env.X %> placeholders in sql/**/*.sql.
+#
+# Task loads .env/mirror.env (the single source of truth) into the shell
+# environment, and snow CLI resolves ctx.env from it. Only optional variables
+# with documented defaults are listed here; a shell variable of the same name
+# overrides them. Required variables are intentionally NOT listed, so a missing
+# one fails fast with "SQL rendering error" instead of running SQL against a
+# placeholder name.
+env:
+  PG_ALLOWED_CIDR: "AUTO"
+  PG_USER: "snowflake_admin"
+  MIRROR_TARGET_TABLE_TYPE: "SNOWFLAKE"

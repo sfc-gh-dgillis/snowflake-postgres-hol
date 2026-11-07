@@ -1,0 +1,46 @@
+# Sensitive environment files
+.env/*.env
+!.env/*.env.template
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE / tooling
+.vscode/
+.idea/
+.cortex/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Credentials (never commit - the lab writes Postgres secrets to ~/.pgpass only)
+*.pem
+*.key
+.pgpass
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Generated output files
+output/*
+!output/.gitkeep
+
+# Generated notebook output (created by the snow-cli:generate-notebook task)
+tasks/snow-cli/notebook/mirror_lab_notebook/generated/*
+!tasks/snow-cli/notebook/mirror_lab_notebook/generated/.gitkeep

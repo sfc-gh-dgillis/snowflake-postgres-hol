@@ -1,0 +1,67 @@
+version: '3'
+
+# Postgres-side tasks. Everything connects with the libpq service
+# $PG_SERVICE_NAME (~/.pg_service.conf + ~/.pgpass) through pgclisp.py,
+# which fills psql variables (:"pg_schema", ...) from .env/mirror.env.
+
+tasks:
+
+  run-sql-file:
+    desc: Runs one SQL file against Postgres with psql.
+    internal: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py "{{.SQL_FILE}}" "$PG_SERVICE_NAME"
+
+  sort-and-process-sql-folder:
+    desc: Runs every NNN-*.sql file in a directory against Postgres, in numeric order.
+    internal: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py "{{.SQL_SORT_PROCESS_DIR}}" "$PG_SERVICE_NAME"
+
+  check-connection:
+    desc: Verifies that psql can reach the instance through the saved service entry.
+    internal: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py sql/whoami.sql "$PG_SERVICE_NAME" --no-echo
+
+  setup:
+    desc: Creates and seeds the IoT tables (devices, sensors, readings).
+    internal: true
+    cmds:
+      - task: sort-and-process-sql-folder
+        vars:
+          SQL_SORT_PROCESS_DIR: sql/setup
+
+  preflight:
+    desc: Checks that the source tables can be mirrored (ordinary, logged, primary key, types).
+    internal: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py sql/inspect/preflight.sql "$PG_SERVICE_NAME" --no-echo
+
+  inspect-mirror-objects:
+    desc: Shows what CREATE_MIRROR set up inside Postgres (extensions, publication, slot, change logs).
+    internal: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py sql/inspect/mirror_objects.sql "$PG_SERVICE_NAME" --no-echo
+
+  stream-readings:
+    desc: Load generator - inserts and updates readings on a schedule with psql \watch.
+    internal: true
+    interactive: true
+    cmds:
+      - python3 pyutil/pgclisp/pgclisp.py sql/stream/stream_readings.sql "$PG_SERVICE_NAME" --no-echo
+
+  shell:
+    desc: Opens an interactive psql session.
+    internal: true
+    interactive: true
+    cmds:
+      - psql "service=$PG_SERVICE_NAME connect_timeout=10"
+
+  drop-lab-tables:
+    desc: Drops only the tables this lab created (existing-mode teardown).
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/teardown/drop_lab_tables.sql

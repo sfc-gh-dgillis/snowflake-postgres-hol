@@ -1,0 +1,45 @@
+version: '3'
+
+tasks:
+
+  snowcli:
+    desc: Validates that Snowflake CLI is installed.
+    internal: true
+    cmds:
+      - ./tasks/validate-prerequisites/cmd/validate-snowcli.sh
+
+  psql:
+    desc: Validates that psql 16+ is installed (the lab load generator uses \watch count=).
+    internal: true
+    cmds:
+      - ./tasks/validate-prerequisites/cmd/validate-psql.sh
+
+  python:
+    desc: Validates that Python 3.9+ is installed (helper scripts use the standard library only).
+    internal: true
+    cmds:
+      - ./tasks/validate-prerequisites/cmd/validate-python.sh
+
+  env:
+    desc: Validates that the env file exists and required variables are set and well-formed.
+    internal: true
+    cmds:
+      - ./tasks/validate-prerequisites/cmd/validate-env.sh "{{.ENV_FILE}}"
+
+  snow-connection:
+    desc: Validates that the configured snow CLI connection can reach Snowflake.
+    internal: true
+    cmds:
+      - ./tasks/validate-prerequisites/cmd/validate-snow-connection.sh
+
+  all:
+    desc: Runs every prerequisite check.
+    internal: true
+    cmds:
+      - task: env
+        vars:
+          ENV_FILE: '{{.ENV_FILE}}'
+      - task: snowcli
+      - task: psql
+      - task: python
+      - task: snow-connection

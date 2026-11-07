@@ -1,0 +1,81 @@
+version: '3'
+
+# Cross-system checks: mirror_check.py reads Postgres with psql and Snowflake
+# with the snow CLI, and prints a timeline until they converge.
+
+vars:
+  CHECK: python3 pyutil/mirrorcheck/mirror_check.py
+
+tasks:
+
+  grant-mirror-admin:
+    desc: Grants the postgres_mirror_admin application role to MIRROR_ADMIN_ROLE_NAME (as ACCOUNTADMIN) unless it already has it.
+    internal: true
+    cmds:
+      - '{{.CHECK}} grant-mirror-admin'
+
+  preflight:
+    desc: Checks the instance (READY, owned by MIRROR_ADMIN_ROLE_NAME) and that the target database is new.
+    internal: true
+    cmds:
+      - '{{.CHECK}} preflight'
+
+  create-mirror:
+    desc: Runs the CREATE_MIRROR SQL file unless the mirror already exists.
+    internal: true
+    cmds:
+      - '{{.CHECK}} create-mirror --sql-file ../snow-cli/sql/mirror/002-create_mirror.sql --project ../snow-cli'
+
+  wait-replicating:
+    desc: Waits until every mirrored table reports REPLICATING.
+    internal: true
+    cmds:
+      - '{{.CHECK}} wait-replicating{{if .TABLES}} --tables {{.TABLES}}{{end}}{{if .TIMEOUT}} --timeout {{.TIMEOUT}}{{end}}'
+
+  compare:
+    desc: Compares Postgres, Snowflake target table, and $live row counts.
+    internal: true
+    cmds:
+      - '{{.CHECK}} compare{{if .TABLES}} --tables {{.TABLES}}{{end}}{{if .WAIT}} --wait{{end}}'
+
+  wait-count:
+    desc: Waits until a target table's row count matches Postgres.
+    internal: true
+    cmds:
+      - '{{.CHECK}} wait-count --table {{.TABLE}}'
+
+  wait-live:
+    desc: Waits until a table's $live view matches Postgres.
+    internal: true
+    cmds:
+      - '{{.CHECK}} wait-live --table {{.TABLE}}'
+
+  wait-columns:
+    desc: Waits until a schema change shows up in a target table.
+    internal: true
+    cmds:
+      - '{{.CHECK}} wait-columns --table {{.TABLE}}{{if .PRESENT}} --present {{.PRESENT}}{{end}}{{if .ABSENT}} --absent {{.ABSENT}}{{end}}'
+
+  observe:
+    desc: Prints Postgres / target / $live counts for a while without asserting.
+    internal: true
+    cmds:
+      - '{{.CHECK}} observe --table {{.TABLE}} --seconds {{.SECONDS | default "90"}}'
+
+  refresh:
+    desc: Applies pending changes now (REFRESH_MIRROR).
+    internal: true
+    cmds:
+      - '{{.CHECK}} refresh'
+
+  status:
+    desc: Mirror health - status, lag, errors, table states, recent apply runs.
+    internal: true
+    cmds:
+      - '{{.CHECK}} status'
+
+  drop-mirror:
+    desc: Drops the mirror and its target database, if the mirror exists.
+    internal: true
+    cmds:
+      - '{{.CHECK}} drop-mirror --yes'

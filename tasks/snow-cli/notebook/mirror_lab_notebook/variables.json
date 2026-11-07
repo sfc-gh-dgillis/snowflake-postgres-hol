@@ -1,0 +1,48 @@
+{
+  "description": "Variable mapping for mirror_lab_notebook template generation. Each variable maps a Jinja placeholder to an environment variable. Values come from .env/mirror.env (the single source of truth); a missing env var is a hard error.",
+  "snowflake_yml_template": "templates/mirror_lab_snowflake_yml_template.yml",
+  "variables": {
+    "admin_role_name": {
+      "env": "MIRROR_ADMIN_ROLE_NAME"
+    },
+    "analyst_role_name": {
+      "env": "DEMO_ANALYST_ROLE_NAME"
+    },
+    "warehouse_name": {
+      "env": "DEMO_WAREHOUSE_NAME"
+    },
+    "database_name": {
+      "env": "DEMO_DATABASE_NAME"
+    },
+    "schema_name": {
+      "env": "DEMO_SCHEMA_NAME"
+    },
+    "stage_name": {
+      "env": "DEMO_INTERNAL_NAMED_STAGE"
+    },
+    "notebook_name": {
+      "env": "DEMO_NOTEBOOK_NAME"
+    },
+    "pg_instance_name": {
+      "env": "PG_INSTANCE_NAME"
+    },
+    "pg_schema_name": {
+      "env": "PG_SCHEMA_NAME"
+    },
+    "mirror_name": {
+      "env": "MIRROR_NAME"
+    },
+    "target_database_name": {
+      "env": "MIRROR_TARGET_DATABASE_NAME"
+    },
+    "dynamic_table_name": {
+      "env": "DEMO_DYNAMIC_TABLE_NAME"
+    },
+    "semantic_view_name": {
+      "env": "DEMO_SEMANTIC_VIEW_NAME"
+    },
+    "agent_name": {
+      "env": "DEMO_AGENT_NAME"
+    }
+  }
+}

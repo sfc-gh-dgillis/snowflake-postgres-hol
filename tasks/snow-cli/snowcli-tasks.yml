@@ -1,0 +1,127 @@
+version: '3'
+
+# Snowflake-side tasks. Every snow command passes --connection
+# "$CLI_CONNECTION_NAME"; <% ctx.env.X %> placeholders in sql/ resolve from
+# the environment that Task loads from .env/mirror.env.
+
+tasks:
+
+  run-sql-file:
+    desc: Runs one SQL file against Snowflake.
+    internal: true
+    cmds:
+      - snow sql --connection "$CLI_CONNECTION_NAME" -f "{{.SQL_FILE}}"
+
+  sort-and-process-sql-folder:
+    desc: Sorts and processes all SQL files in the given directory. Sorts and executes SQL files with numeric prefixes (e.g., 001-schema.sql)
+    internal: true
+    cmds:
+      - python3 pyutil/snowclisp/snowclisp.py "{{.SQL_SORT_PROCESS_DIR}}" "$CLI_CONNECTION_NAME" --prefix-file sql/whoami.sql
+
+  run-init:
+    desc: Runs the Snowflake initialization script (warehouse, lab database, stage, analyst role).
+    internal: true
+    vars:
+      SQL_DIR: '{{.SQL_DIR | default "sql/init"}}'
+    cmds:
+      - cmd/run-init.sh "{{.SQL_DIR}}"
+
+  apply-postgres-network-policy:
+    desc: Creates or updates the POSTGRES_INGRESS network rule + policy for your IP (create mode).
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/init/network_policy.sql
+
+  pg-instance-create:
+    desc: Creates (or reuses) the Postgres instance and saves the connection without displaying secrets.
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py create
+
+  pg-instance-attach:
+    desc: Verifies a bring-your-own instance and saves its service entry (existing mode).
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py attach
+
+  pg-instance-info:
+    desc: Shows safe Postgres instance fields (never access_roles).
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py info
+
+  pg-instance-reset-access:
+    desc: Rotates the PG_USER password and saves it to ~/.pgpass without displaying it.
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py reset-access --yes
+
+  pg-instance-drop:
+    desc: Drops the lab's Postgres instance (create mode only) and waits until it is gone.
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py drop --yes
+
+  pg-instance-forget:
+    desc: Removes the local service entry, password line, and CA cert for the lab instance.
+    internal: true
+    cmds:
+      - python3 pyutil/pginstance/pg_instance.py forget
+
+  mirror-grants:
+    desc: Grants USAGE on the Postgres instance to the snowflake application (as the owning role).
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/mirror/001-grants.sql
+
+  grant-analyst-read:
+    desc: Delegates read access on the mirrored data (<TARGET>_ADMIN database role) to the analyst role.
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/mirror/003-grant_analyst_read.sql
+
+  generate-notebook:
+    desc: Generates the mirror lab notebook from its template with variable substitution.
+    internal: true
+    vars:
+      TEMPLATE_FILE: '{{.TEMPLATE_FILE | default "notebook/mirror_lab_notebook/templates/mirror_lab_template.ipynb"}}'
+      OUTPUT_FILE: '{{.OUTPUT_FILE | default "notebook/mirror_lab_notebook/generated/mirror_lab_notebook.ipynb"}}'
+      VARIABLES_FILE: '{{.VARIABLES_FILE | default "notebook/mirror_lab_notebook/variables.json"}}'
+    cmds:
+      - cmd/generate-notebook-generic.sh "{{.TEMPLATE_FILE}}" "{{.OUTPUT_FILE}}" "{{.VARIABLES_FILE}}"
+
+  deploy-notebook:
+    desc: Deploys the generated notebook to Snowflake using the Snow CLI.
+    internal: true
+    vars:
+      PROJECT_DIR: '{{.PROJECT_DIR | default "notebook/mirror_lab_notebook/generated"}}'
+    cmds:
+      - cmd/deploy-notebook.sh "{{.PROJECT_DIR}}"
+
+  notebook-url:
+    desc: Prints the Snowsight URL of the deployed notebook.
+    internal: true
+    cmds:
+      - snow notebook get-url "$DEMO_NOTEBOOK_NAME" --database "$DEMO_DATABASE_NAME" --schema "$DEMO_SCHEMA_NAME" --connection "$CLI_CONNECTION_NAME"
+
+  drop-network-policy:
+    desc: Drops the Postgres ingress network policy (create-mode teardown, after the instance is gone).
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/teardown/drop_network_policy.sql
+
+  drop-lab-objects:
+    desc: Drops the lab database and the analyst role.
+    internal: true
+    cmds:
+      - task: run-sql-file
+        vars:
+          SQL_FILE: sql/teardown/drop_lab_objects.sql
