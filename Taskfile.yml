@@ -5,9 +5,9 @@ includes:
   snow-cli:
     taskfile: ./tasks/snow-cli/snowcli-tasks.yml
     dir: ./tasks/snow-cli
-  pg-cli:
-    taskfile: ./tasks/pg-cli/pgcli-tasks.yml
-    dir: ./tasks/pg-cli
+  psql-cli:
+    taskfile: ./tasks/psql-cli/psqlcli-tasks.yml
+    dir: ./tasks/psql-cli
   lab:
     taskfile: ./tasks/lab/lab-tasks.yml
     dir: ./tasks/lab
@@ -52,8 +52,8 @@ tasks:
     cmds:
       - task: validate-prerequisites
       - task: infrastructure-up-{{.INSTANCE_MODE}}
-      - task: pg-cli:check-connection
-      - task: pg-cli:setup
+      - task: psql-cli:check-connection
+      - task: psql-cli:setup
       - task: notebook-up
       - task: banner
         vars:
@@ -100,7 +100,7 @@ tasks:
         vars:
           TITLE: 'Lab 1 - Create the mirror'
           TEXT: 'One procedure call replicates devices, sensors and readings into Snowflake.'
-      - task: pg-cli:preflight
+      - task: psql-cli:preflight
       - task: lab:grant-mirror-admin
       - task: snow-cli:mirror-grants
       - task: lab:preflight
@@ -115,7 +115,7 @@ tasks:
       - task: snow-cli:run-sql-file
         vars:
           SQL_FILE: sql/lab/1-confirm_data.sql
-      - task: pg-cli:inspect-mirror-objects
+      - task: psql-cli:inspect-mirror-objects
 
   lab-2-add-data:
     desc: 'Lab 2: insert 500 readings in Postgres; watch $live, then the target table, catch up.'
@@ -124,7 +124,7 @@ tasks:
         vars:
           TITLE: 'Lab 2 - Add more data and monitor sync'
           TEXT: 'Watch $live pick up the rows within ~30s; READINGS follows on the next apply run.'
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/lab/2-add_readings.sql
       - task: lab:wait-count
@@ -141,7 +141,7 @@ tasks:
         vars:
           TITLE: 'Lab 3 - Schema changes through the mirror'
           TEXT: 'ADD COLUMN status and RENAME location TO site_location, with no mirror changes.'
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/lab/3-schema_changes.sql
       - task: lab:wait-columns
@@ -161,7 +161,7 @@ tasks:
         vars:
           TITLE: 'Lab 4 - Deletes'
           TEXT: 'Deleted rows leave the target table; READINGS$changes keeps a record of them.'
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/lab/4-deletes.sql
       - task: lab:wait-count
@@ -178,7 +178,7 @@ tasks:
         vars:
           TITLE: 'Lab 5 - $live and $changes'
           TEXT: 'A new device shows up in DEVICES$live before the DEVICES table is updated.'
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/lab/5-live_insert.sql
       - task: lab:wait-live
@@ -198,7 +198,7 @@ tasks:
       - task: snow-cli:run-sql-file
         vars:
           SQL_FILE: sql/ops/001-alter_refresh_interval.sql
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/ops/create_maintenance_events.sql
       - task: snow-cli:run-sql-file
@@ -218,7 +218,7 @@ tasks:
       - task: snow-cli:run-sql-file
         vars:
           SQL_FILE: sql/ops/003-suspend.sql
-      - task: pg-cli:run-sql-file
+      - task: psql-cli:run-sql-file
         vars:
           SQL_FILE: sql/ops/insert_while_suspended.sql
       - task: lab:observe
@@ -277,7 +277,7 @@ tasks:
   stream-readings:
     desc: 'Load generator: streams readings into Postgres (STREAM_* settings). Watch them arrive in Snowflake.'
     cmds:
-      - task: pg-cli:stream-readings
+      - task: psql-cli:stream-readings
 
   mirror-status:
     desc: Shows mirror health - status, lag, errors, table states, recent apply runs.
@@ -304,7 +304,7 @@ tasks:
   pg-shell:
     desc: Opens an interactive psql session on the lab database.
     cmds:
-      - task: pg-cli:shell
+      - task: psql-cli:shell
 
   pg-instance-info:
     desc: Shows the Postgres instance state, owner, size, and host.
@@ -357,7 +357,7 @@ tasks:
     internal: true
     cmds:
       - task: lab:drop-mirror
-      - task: pg-cli:drop-lab-tables
+      - task: psql-cli:drop-lab-tables
       - task: snow-cli:drop-lab-objects
 
   banner:

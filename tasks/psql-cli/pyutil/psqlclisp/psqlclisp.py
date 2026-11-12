@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pgclisp - psql sort and process (sql files) utility
+psqlclisp - psql sort and process (sql files) utility
 SQL File Executor for psql (the Postgres twin of snowclisp)
 
 Runs one SQL file, or every NNN-*.sql file in a directory in numeric order,

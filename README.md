@@ -302,9 +302,9 @@ snowflake-postgres-hol/
 |   |       +-- templates/             # Notebook + snowflake.yml templates
 |   |       +-- variables.json         # Placeholder -> env var mapping
 |   |       +-- generated/             # Rendered notebook (git-ignored)
-|   +-- pg-cli/                        # Everything that runs against Postgres
-|   |   +-- pgcli-tasks.yml
-|   |   +-- pyutil/pgclisp/            # psql twin of snowclisp (fills psql variables from env)
+|   +-- psql-cli/                      # Everything that runs against Postgres
+|   |   +-- psqlcli-tasks.yml
+|   |   +-- pyutil/psqlclisp/          # psql twin of snowclisp (fills psql variables from env)
 |   |   +-- sql/
 |   |       +-- setup/                 # 001 tables, 002 seed (5/10/485), 003 verify
 |   |       +-- lab/                   # Postgres-side change for each lab step
@@ -321,8 +321,8 @@ snowflake-postgres-hol/
 
 ## How It Works
 
-- **One env file, three consumers.** Task loads `.env/mirror.env` into the environment. Snowflake SQL reads it through `snow` templating (`<% ctx.env.MIRROR_NAME %>`), Postgres SQL through psql variables (`:"pg_schema"`, filled in by `pgclisp.py`), and the notebook generator through `variables.json`. A missing required variable fails with "SQL rendering error" instead of running SQL against a placeholder.
-- **Ordered SQL batches.** `snowclisp.py` and `pgclisp.py` run `NNN-*.sql` files in numeric order and stop on the first error.
+- **One env file, three consumers.** Task loads `.env/mirror.env` into the environment. Snowflake SQL reads it through `snow` templating (`<% ctx.env.MIRROR_NAME %>`), Postgres SQL through psql variables (`:"pg_schema"`, filled in by `psqlclisp.py`), and the notebook generator through `variables.json`. A missing required variable fails with "SQL rendering error" instead of running SQL against a placeholder.
+- **Ordered SQL batches.** `snowclisp.py` and `psqlclisp.py` run `NNN-*.sql` files in numeric order and stop on the first error.
 - **Self-verifying steps.** `mirror_check.py` reads Postgres with `psql` and Snowflake with `snow`, and polls until the change is visible (counts, columns, table states) or `LAB_SYNC_TIMEOUT_SECONDS` expires.
 - **Re-runnable.** Setup seeds only empty tables, lab-3 skips DDL that already happened, lab-1 skips `CREATE_MIRROR` if the mirror exists, and teardown tolerates partial state.
 
@@ -421,7 +421,7 @@ The lab saves its Postgres connection in the standard `~/.pg_service.conf` / `~/
 | Capability | Where |
 |------------|-------|
 | Automated instance, network policy, and secure connection setup | `demo-up` (`pg_instance.py`, `sql/init/network_policy.sql`) |
-| Postgres-side view of the mirror (publication, slot, change logs) | lab-1 (`pg-cli/sql/inspect/mirror_objects.sql`) |
+| Postgres-side view of the mirror (publication, slot, change logs) | lab-1 (`psql-cli/sql/inspect/mirror_objects.sql`) |
 | Update pairs in `$changes` (`_XID`, `_IS_UPDATE`) | lab-5 |
 | `ALTER_MIRROR` (refresh interval, `add_tables`), `SUSPEND` / `RESUME` / `REFRESH_MIRROR` | lab-6 |
 | Monitoring: `DESCRIBE_MIRROR`, `QUERY_ADMIN_LOG`, apply task history | lab-6, `task mirror-status` |
