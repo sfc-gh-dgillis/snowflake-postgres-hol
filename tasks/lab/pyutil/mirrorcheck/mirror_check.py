@@ -24,6 +24,7 @@ Commands:
   refresh           apply pending changes now (REFRESH_MIRROR)
   status            mirror health: status, lag, errors, table states, apply runs
   drop-mirror       drop the mirror and its target database (requires --yes)
+  setup-status      readiness checklist after setup: PASS / FAIL / INFO with a fix for each item
 """
 
 from __future__ import annotations
@@ -165,6 +166,15 @@ def list_mirrors() -> List[Dict[str, Any]]:
     return snow_rows("SELECT * FROM TABLE(SNOWFLAKE.POSTGRES.LIST_MIRRORS())")
 
 
+def holds_mirror_admin() -> bool:
+    """True when MIRROR_ADMIN_ROLE_NAME can call the mirror procedures (granted or inherited)."""
+    try:
+        list_mirrors()
+        return True
+    except LabError:
+        return False
+
+
 def find_mirror() -> Optional[Dict[str, Any]]:
     for row in list_mirrors():
         if str(pick(row, "mirror_name", "name") or "").lower() == mirror_name():
@@ -279,17 +289,18 @@ def count_line(poller: Poller, pg: int, base: Optional[int], live: Optional[int]
 def cmd_grant_mirror_admin(_args: argparse.Namespace) -> None:
     """Give MIRROR_ADMIN_ROLE_NAME the postgres_mirror_admin application role.
 
+    Runs during setup (demo-up / infrastructure-up), not in lab-1: on a new
+    account the snowflake application can take up to an hour to appear, and
+    that is better found before the session than in the middle of it.
+
     ACCOUNTADMIN grants it (per the docs), so a non-ACCOUNTADMIN role that owns
     the instance can't grant it to itself. Skip when the role can already call
     the mirror procedures (granted directly or inherited).
     """
     role = env("MIRROR_ADMIN_ROLE_NAME")
-    try:
-        list_mirrors()
+    if holds_mirror_admin():
         print(f"✓ {role} already holds snowflake.postgres_mirror_admin")
         return
-    except LabError:
-        pass
 
     grant = f"GRANT APPLICATION ROLE SNOWFLAKE.POSTGRES_MIRROR_ADMIN TO ROLE {role}"
     print(f"Granting the mirror admin application role (as ACCOUNTADMIN):\n    {grant};", flush=True)
@@ -301,7 +312,8 @@ def cmd_grant_mirror_admin(_args: argparse.Namespace) -> None:
             hint = ("\n  On a newly created account the snowflake application can take up to an hour "
                     "to provision; wait and retry.")
         raise LabError(f"Could not grant postgres_mirror_admin to {role}: {first_line(exc)}\n"
-                       f"  Ask an account admin to run, then re-run this step:\n    {grant};{hint}")
+                       f"  Ask an account admin to run, then re-run `task infrastructure-up`:\n"
+                       f"    {grant};{hint}")
     print(f"✓ {role} now holds snowflake.postgres_mirror_admin")
 
 
@@ -309,6 +321,13 @@ def cmd_preflight(_args: argparse.Namespace) -> None:
     target = env("MIRROR_TARGET_DATABASE_NAME")
     instance_name = env("PG_INSTANCE_NAME")
     role = env("MIRROR_ADMIN_ROLE_NAME")
+
+    if not holds_mirror_admin():
+        raise LabError(f"{role} cannot call the mirror procedures: it does not hold "
+                       "snowflake.postgres_mirror_admin. Run `task infrastructure-up` (it grants the "
+                       "role as ACCOUNTADMIN), or have an account admin run:\n"
+                       f"    GRANT APPLICATION ROLE SNOWFLAKE.POSTGRES_MIRROR_ADMIN TO ROLE {role};")
+    print(f"✓ {role} holds snowflake.postgres_mirror_admin")
 
     existing = find_mirror()
     if existing:
@@ -570,6 +589,146 @@ def cmd_drop_mirror(args: argparse.Namespace) -> None:
     print(f"✓ Mirror {mirror_name()} dropped (publication, replication slot, apply task, target database)")
 
 
+def _show_one(query: str, name: str) -> Optional[Dict[str, Any]]:
+    """The row named `name` (case-insensitive) from a SHOW ... LIKE query, if any."""
+    for row in snow_rows(query):
+        if str(row.get("name", "")).upper() == name.upper():
+            return row
+    return None
+
+
+def _bare_name(value: Any) -> str:
+    """Last part of a possibly qualified, possibly quoted identifier, uppercased."""
+    return str(value or "").split(".")[-1].strip('"').upper()
+
+
+def cmd_setup_status(_args: argparse.Namespace) -> None:
+    """One readiness checklist for the lab setup: PASS / FAIL / INFO with a fix for each.
+
+    Every check runs even if an earlier one fails, so one run shows everything
+    that is missing. Never prints credentials.
+    """
+    mode = os.environ.get("POSTGRES_INSTANCE_MODE", "create")
+    role = env("MIRROR_ADMIN_ROLE_NAME")
+    warehouse = env("DEMO_WAREHOUSE_NAME")
+    database, schema = env("DEMO_DATABASE_NAME"), env("DEMO_SCHEMA_NAME")
+    stage = env("DEMO_INTERNAL_NAMED_STAGE")
+    analyst = env("DEMO_ANALYST_ROLE_NAME")
+    instance_name = env("PG_INSTANCE_NAME")
+    service = env("PG_SERVICE_NAME")
+    results: List[Tuple[str, str, str]] = []
+    dcm_project = (f"{env('DCM_PROJECT_DATABASE')}.{env('DCM_PROJECT_SCHEMA')}."
+                   f"{env('DCM_SETUP_PROJECT_NAME')}")
+
+    def check(item: str, fix: str, test) -> None:
+        try:
+            outcome = test()
+        except LabError as exc:
+            results.append((item, "FAIL", f"{first_line(exc)}  ->  {fix}"))
+            return
+        if outcome is True:
+            results.append((item, "PASS", ""))
+        elif outcome is False:
+            results.append((item, "FAIL", fix))
+        else:
+            # (status, detail) for anything other than a plain pass/fail
+            results.append((item, outcome[0], outcome[1]))
+
+    check(f"DCM project {dcm_project}", "Re-run `task infrastructure-up` (it registers and deploys it).",
+          lambda: bool(snow_rows(f"DESCRIBE DCM PROJECT {dcm_project}")))
+    check(f"Warehouse {warehouse}", "Re-run `task infrastructure-up`.",
+          lambda: _show_one(f"SHOW WAREHOUSES LIKE {sql_literal(warehouse)}", warehouse) is not None)
+    check(f"Lab schema {database}.{schema}", "Re-run `task infrastructure-up`.",
+          lambda: _show_one(f"SHOW SCHEMAS LIKE {sql_literal(schema)} IN DATABASE {database}", schema)
+          is not None)
+    check(f"Stage {database}.{schema}.{stage}", "Re-run `task infrastructure-up`.",
+          lambda: _show_one(f"SHOW STAGES LIKE {sql_literal(stage)} IN SCHEMA {database}.{schema}", stage)
+          is not None)
+    check(f"Analyst role {analyst}", "Re-run `task infrastructure-up`.",
+          lambda: _show_one(f"SHOW ROLES LIKE {sql_literal(analyst)}", analyst) is not None)
+    check(f"{role} holds snowflake.postgres_mirror_admin",
+          "Re-run `task infrastructure-up`, or have an account admin run: GRANT APPLICATION ROLE "
+          f"SNOWFLAKE.POSTGRES_MIRROR_ADMIN TO ROLE {role}; (new accounts: allow up to an hour)",
+          holds_mirror_admin)
+
+    instance: Dict[str, Any] = {}
+
+    def instance_ready():
+        found = show_instance(instance_name)
+        if found is None:
+            return ("FAIL", "Not found. Re-run `task infrastructure-up` (create mode), or check "
+                            "PG_INSTANCE_NAME (it is case-sensitive).")
+        instance.update(found)
+        state = str(found.get("state", "")).upper()
+        owner = str(found.get("owner", ""))
+        if owner.upper() != role.upper():
+            return ("FAIL", f"Owned by {owner}. Mirror procedures need the caller to own the instance: "
+                            f"set MIRROR_ADMIN_ROLE_NAME={owner}.")
+        if not state.startswith("READY"):
+            return ("WAIT", f"State {state}. Still provisioning or resuming: run `task setup-status` "
+                            "again in a minute.")
+        return True
+
+    check(f"Postgres instance {instance_name} READY and owned by {role}", "", instance_ready)
+
+    if mode == "create":
+        policy = env("PG_NETWORK_POLICY_NAME")
+        rule = f"{database}.{schema}.{env('PG_NETWORK_RULE_NAME')}"
+
+        def policy_attached():
+            if _show_one(f"SHOW NETWORK POLICIES LIKE {sql_literal(policy)}", policy) is None:
+                return ("FAIL", "Policy not found. Run `task pg-allow-my-ip`.")
+            # DESCRIBE output holds secrets: read only the network_policy property, never print it
+            attached = ""
+            for row in snow_rows(f'DESCRIBE POSTGRES INSTANCE "{instance_name}"'):
+                if str(row.get("property", "")).lower() == "network_policy":
+                    attached = str(row.get("value") or "")
+            if _bare_name(attached) != policy.upper():
+                return ("FAIL", f"Instance uses {attached or 'no network policy'}. Attach it with: "
+                                f'ALTER POSTGRES INSTANCE "{instance_name}" SET NETWORK_POLICY = \'{policy}\';')
+            return True
+
+        def ip_allowed():
+            cidr = os.environ.get("PG_ALLOWED_CIDR", "AUTO")
+            if cidr == "AUTO":
+                cidr = str(snow_rows("SELECT CURRENT_IP_ADDRESS() AS ip")[0]["ip"]) + "/32"
+            rows = snow_rows(f"DESCRIBE NETWORK RULE {rule}")
+            values = " ".join(str(v) for row in rows for k, v in row.items() if "value" in k)
+            if cidr not in values:
+                return ("FAIL", f"Rule allows {values or 'nothing'}, not {cidr}. Your IP probably changed: "
+                                "run `task pg-allow-my-ip`.")
+            return True
+
+        check(f"Network policy {policy} attached to the instance", "", policy_attached)
+        check("Ingress rule allows your IP (or PG_ALLOWED_CIDR)", "", ip_allowed)
+    else:
+        results.append(("Postgres network policy", "INFO",
+                        "Existing mode: managed by you; the lab does not change it."))
+
+    def pg_connects():
+        psql_rows("SELECT 1 AS ok")
+        return True
+
+    check(f'Postgres login (psql "service={service}")',
+          "Timeouts: run `task pg-allow-my-ip`. Password errors: run `task pg-reset-access`.", pg_connects)
+
+    if instance.get("host"):
+        results.append(("Postgres hostname", "INFO", str(instance["host"])))
+    results.append(("Postgres password", "INFO",
+                    f"Saved for {os.environ.get('PG_USER', 'snowflake_admin')} in ~/.pgpass (mode 600); "
+                    "never displayed. Rotate with `task pg-reset-access`."))
+
+    width = max(len(item) for item, _, _ in results)
+    print("Setup status")
+    for item, status, detail in results:
+        print(f"  {item:<{width}}  {status:<4}  {detail}".rstrip())
+
+    not_ready = [item for item, status, _ in results if status in ("FAIL", "WAIT")]
+    if not_ready:
+        raise LabError(f"{len(not_ready)} check(s) not passing; fix them, then run `task setup-status` again.")
+    print("\n✓ Setup is ready. Next: task lab-1-create-mirror")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cross-system checks for the Snowflake Postgres mirror HOL")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -627,6 +786,9 @@ def main() -> int:
     p = sub.add_parser("drop-mirror", help="drop the mirror and its target database")
     p.add_argument("--yes", action="store_true", help="confirm the drop")
     p.set_defaults(func=cmd_drop_mirror)
+
+    sub.add_parser("setup-status", help="readiness checklist for the lab setup"
+                   ).set_defaults(func=cmd_setup_status)
 
     args = parser.parse_args()
     try:

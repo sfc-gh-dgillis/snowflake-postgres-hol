@@ -18,21 +18,109 @@ tasks:
     cmds:
       - python3 pyutil/snowclisp/snowclisp.py "{{.SQL_SORT_PROCESS_DIR}}" "$CLI_CONNECTION_NAME" --prefix-file sql/whoami.sql
 
-  run-init:
-    desc: Runs the Snowflake initialization script (warehouse, lab database, stage, analyst role).
-    internal: true
-    vars:
-      SQL_DIR: '{{.SQL_DIR | default "sql/init"}}'
-    cmds:
-      - cmd/run-init.sh "{{.SQL_DIR}}"
+  # -----------------------------------------------------------------------
+  # DCM (Database Change Management)
+  #
+  # Two DCM projects, one folder each under dcm/, selected with DCM_PROJECT:
+  #   iot_mirror_lab        setup: lab database / schema / stage, warehouse,
+  #                         analyst role, and (create mode) the Postgres
+  #                         ingress network rule and policy
+  #   iot_mirror_analytics  lab-7: dynamic table and semantic view on the
+  #                         mirrored tables, so it is deployed second and
+  #                         purged first
+  #
+  # pyutil/dcm/dcm.py runs snow dcm inside the project folder (plan writes
+  # that project's out/), as MIRROR_ADMIN_ROLE_NAME: DCM makes the executing
+  # role the owner of every object it creates. It passes the project
+  # identifier and every templating variable from .env/mirror.env.
+  # -----------------------------------------------------------------------
 
-  apply-postgres-network-policy:
-    desc: Creates or updates the POSTGRES_INGRESS network rule + policy for your IP (create mode).
+  dcm-project-home:
+    desc: Creates DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA, which holds the DCM project objects (a project cannot define its own parent).
     internal: true
     cmds:
       - task: run-sql-file
         vars:
-          SQL_FILE: sql/init/network_policy.sql
+          SQL_FILE: sql/init/dcm_project_home.sql
+
+  dcm-create:
+    desc: Registers a DCM project object in Snowflake if it does not already exist.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - python3 pyutil/dcm/dcm.py create "{{.DCM_PROJECT}}"
+
+  dcm-analyze:
+    desc: Validates a DCM project's definitions; fails only on issues above INFO. Applies nothing.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - python3 pyutil/dcm/dcm.py analyze "{{.DCM_PROJECT}}"
+
+  dcm-plan:
+    desc: Shows what a DCM project would create, alter, or drop. Applies nothing.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - python3 pyutil/dcm/dcm.py plan "{{.DCM_PROJECT}}"
+
+  dcm-deploy:
+    desc: Reconciles Snowflake with a DCM project's definitions.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT, DCM_ALIAS]
+    cmds:
+      - python3 pyutil/dcm/dcm.py deploy "{{.DCM_PROJECT}}" --alias "{{.DCM_ALIAS}}"
+
+  dcm-purge:
+    desc: Drops every Snowflake object a DCM project manages. Irreversible; skipped if the project is gone.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - python3 pyutil/dcm/dcm.py purge "{{.DCM_PROJECT}}" --yes
+
+  dcm-drop:
+    desc: Removes a DCM project registration. Leaves managed objects untouched, so purge first.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - python3 pyutil/dcm/dcm.py drop "{{.DCM_PROJECT}}"
+
+  dcm-up:
+    desc: Registers (if needed) and deploys a DCM project.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT, DCM_ALIAS]
+    cmds:
+      - task: dcm-create
+        vars:
+          DCM_PROJECT: '{{.DCM_PROJECT}}'
+      - task: dcm-deploy
+        vars:
+          DCM_PROJECT: '{{.DCM_PROJECT}}'
+          DCM_ALIAS: '{{.DCM_ALIAS}}'
+
+  dcm-down:
+    desc: Purges a DCM project's objects, then removes its registration.
+    internal: true
+    requires:
+      vars: [DCM_PROJECT]
+    cmds:
+      - task: dcm-purge
+        vars:
+          DCM_PROJECT: '{{.DCM_PROJECT}}'
+      - task: dcm-drop
+        vars:
+          DCM_PROJECT: '{{.DCM_PROJECT}}'
+
+  # -----------------------------------------------------------------------
+  # Postgres instance
+  # -----------------------------------------------------------------------
 
   pg-instance-create:
     desc: Creates (or reuses) the Postgres instance and saves the connection without displaying secrets.
@@ -109,19 +197,3 @@ tasks:
     internal: true
     cmds:
       - snow notebook get-url "$DEMO_NOTEBOOK_NAME" --database "$DEMO_DATABASE_NAME" --schema "$DEMO_SCHEMA_NAME" --connection "$CLI_CONNECTION_NAME"
-
-  drop-network-policy:
-    desc: Drops the Postgres ingress network policy (create-mode teardown, after the instance is gone).
-    internal: true
-    cmds:
-      - task: run-sql-file
-        vars:
-          SQL_FILE: sql/teardown/drop_network_policy.sql
-
-  drop-lab-objects:
-    desc: Drops the lab database and the analyst role.
-    internal: true
-    cmds:
-      - task: run-sql-file
-        vars:
-          SQL_FILE: sql/teardown/drop_lab_objects.sql

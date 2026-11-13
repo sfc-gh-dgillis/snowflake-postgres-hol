@@ -3,7 +3,7 @@ version: '3'
 tasks:
 
   snowcli:
-    desc: Validates that Snowflake CLI is installed.
+    desc: Validates that Snowflake CLI 3.17+ is installed (DCM projects, snow dcm purge).
     internal: true
     cmds:
       - ./tasks/validate-prerequisites/cmd/validate-snowcli.sh

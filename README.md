@@ -25,6 +25,7 @@ This lab automates the setup with Task:
 
 - **Postgres instance:** create one (default) or use one you already own, routed by `POSTGRES_INSTANCE_MODE`
 - **Secure connection setup:** credentials go to `~/.pgpass` (mode 600) and are never displayed. A `POSTGRES_INGRESS` network policy is scoped to your IP, and connections use `sslmode=verify-ca`.
+- **Snowflake objects as code:** the lab database, warehouse, analyst role, network policy, and lab-7 analytics are declared in two DCM (Database Change Management) projects, deployed and purged as a whole
 - **Seven lab steps:** each runs SQL in Postgres, waits for the mirror, and shows the Snowflake side
 - **Companion notebook:** generated from a template and deployed to Snowsight for the Snowflake-side exploration
 - **Extras:** a `psql` load generator, mirror operations (`ALTER`/`SUSPEND`/`RESUME`/`REFRESH`), and a dynamic table, semantic view, and Cortex Agent on the mirrored data
@@ -60,8 +61,8 @@ Open the notebook URL that `demo-up` prints in Snowsight and keep it next to you
 
 | | `create` (default) | `existing` |
 |---|---|---|
-| **demo-up** | Creates the lab objects, a `POSTGRES_INGRESS` network policy for your IP, and a new `STANDARD_M` instance (`STANDARD_L` on Azure). Saves the connection without displaying secrets. | Creates the lab objects and checks an instance you already own: READY (resumed if suspended) and owned by `MIRROR_ADMIN_ROLE_NAME`. Saves its service entry. Never touches its network policy. |
-| **demo-teardown** | Drops the mirror, the **instance**, the network policy, the lab objects, and the local connection entries | Drops the mirror, **only the tables this lab created**, and the lab objects. Keeps your instance and connection. |
+| **demo-up** | Deploys the DCM project `iot_mirror_lab` (lab objects plus a `POSTGRES_INGRESS` network policy for your IP), grants `postgres_mirror_admin`, and creates a new `STANDARD_M` instance (`STANDARD_L` on Azure). Saves the connection without displaying secrets. Ends with a readiness checklist. | Deploys `iot_mirror_lab` (lab objects only), grants `postgres_mirror_admin`, and checks an instance you already own: READY (resumed if suspended) and owned by `MIRROR_ADMIN_ROLE_NAME`. Saves its service entry. Never touches its network policy. Ends with a readiness checklist. |
+| **demo-teardown** | Purges both DCM projects (lab objects, network policy, the warehouse if the lab owns it), and drops the mirror, the **instance**, and the local connection entries | Purges both DCM projects, and drops the mirror and **only the tables this lab created**. Keeps your instance and connection. |
 
 Override the mode for a single run from your shell:
 
@@ -72,10 +73,10 @@ POSTGRES_INSTANCE_MODE=existing task demo-up
 ## Prerequisites
 
 - [Task](https://taskfile.dev/): task runner (install: `brew install go-task`)
-- [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) with a configured connection
+- [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) **3.17 or later** (DCM projects, `snow dcm purge`) with a configured connection
 - [psql](https://www.postgresql.org/docs/current/app-psql.html) 16 or later (install: `brew install libpq && brew link --force libpq`)
 - [Python 3.9+](https://www.python.org/): the helper scripts use only the standard library (no venv or `pip install`)
-- A Snowflake account on **AWS or Azure** with Snowflake Postgres available, and a role that can create Postgres instances and network policies (`ACCOUNTADMIN` by default)
+- A Snowflake account on **AWS or Azure** with Snowflake Postgres available, and a role that can create Postgres instances, network policies, roles, and DCM projects (`ACCOUNTADMIN` by default)
 
 **Use non-interactive authentication.** The lab runs many `snow` commands. Key-pair, PAT, or password connections work without prompting. A browser-SSO connection opens a browser for every command unless token caching is enabled.
 
@@ -106,10 +107,20 @@ DOTENV_FILENAME=other.env task demo-up
 ```bash
 CLI_CONNECTION_NAME=my_connection         # snow connection used by every task
 MIRROR_ADMIN_ROLE_NAME=ACCOUNTADMIN       # creates/owns the instance, network policy, and mirror
-DEMO_WAREHOUSE_NAME=COMPUTE_WH
+DEMO_WAREHOUSE_NAME=IOT_MIRROR_LAB_WH
+DEMO_WAREHOUSE_MANAGED=true               # true: DCM creates and teardown drops it; false: use an existing warehouse as-is
 DEMO_DATABASE_NAME=POSTGRES_MIRROR_HOL    # lab-owned objects (network rule, notebook, analytics)
 DEMO_SCHEMA_NAME=LAB
 DEMO_ANALYST_ROLE_NAME=IOT_MIRROR_ANALYST # gets read access to the mirrored data in lab-1
+```
+
+#### DCM Projects
+
+```bash
+DCM_PROJECT_DATABASE=UTIL                 # where the DCM project objects live (created if missing, kept on teardown)
+DCM_PROJECT_SCHEMA=DCM_PROJECT_ARCHIVE
+DCM_SETUP_PROJECT_NAME=IOT_MIRROR_LAB     # setup objects (tasks/snow-cli/dcm/iot_mirror_lab)
+DCM_ANALYTICS_PROJECT_NAME=IOT_MIRROR_ANALYTICS  # lab-7 analytics (tasks/snow-cli/dcm/iot_mirror_analytics)
 ```
 
 #### Postgres Instance
@@ -119,6 +130,7 @@ POSTGRES_INSTANCE_MODE=create             # create | existing
 PG_INSTANCE_NAME=IOT_MIRROR_LAB           # exact, case-sensitive instance name
 PG_COMPUTE_FAMILY=STANDARD_M              # create mode; AWS-only, use STANDARD_L on Azure; BURST_* is not supported
 PG_STORAGE_SIZE_GB=10
+PG_POSTGRES_VERSION=                      # create mode; empty = platform default, or pin a major version (e.g. 18)
 PG_DATABASE_NAME=postgres
 PG_SCHEMA_NAME=public
 PG_SERVICE_NAME=iot_mirror_lab            # entry in ~/.pg_service.conf
@@ -154,13 +166,34 @@ The exact timings depend on the refresh interval and when the next apply run sta
 
 ### Setup: `task demo-up`
 
-Provisions the instance (several minutes in create mode), then creates and seeds the operational IoT schema from the quickstart: **5 devices, 10 sensors, 485 readings**. Every table has a primary key, so updates and deletes replicate. Re-running `demo-up` is safe: the seed only runs on empty tables.
+Deploys the DCM project `iot_mirror_lab`: the lab database, schema and stage, the warehouse (when `DEMO_WAREHOUSE_MANAGED=true`), the analyst role and its grants, and in create mode the `POSTGRES_INGRESS` network rule and policy, with your current IP filled in. It then grants the `snowflake.postgres_mirror_admin` application role to `MIRROR_ADMIN_ROLE_NAME` (as `ACCOUNTADMIN`, skipped if the role already holds it). The grant runs first because on a new account the `snowflake` application can take up to an hour to appear, and that is better found before the session than during it. If you can't use `ACCOUNTADMIN`, setup prints the `GRANT` for an admin to run.
+
+It then provisions the instance (typically 3-5 minutes in create mode), and creates and seeds the operational IoT schema from the quickstart: **5 devices, 10 sensors, 485 readings**. Every table has a primary key, so updates and deletes replicate. Re-running `demo-up` is safe: the seed only runs on empty tables.
+
+Setup ends with a readiness checklist. Every row should read `PASS` before lab-1; anything else comes with the fix. Run it again any time with `task setup-status`:
+
+```text
+Setup status
+  Warehouse IOT_MIRROR_LAB_WH                               PASS
+  Lab schema POSTGRES_MIRROR_HOL.LAB                        PASS
+  Stage POSTGRES_MIRROR_HOL.LAB.LAB_STAGE                   PASS
+  Analyst role IOT_MIRROR_ANALYST                           PASS
+  ACCOUNTADMIN holds snowflake.postgres_mirror_admin        PASS
+  Postgres instance IOT_MIRROR_LAB READY and owned by ...   PASS
+  Network policy IOT_MIRROR_LAB_PG_INGRESS_POLICY attached  PASS
+  Ingress rule allows your IP (or PG_ALLOWED_CIDR)          PASS
+  Postgres login (psql "service=iot_mirror_lab")            PASS
+  Postgres hostname                                         INFO  <host>
+  Postgres password                                         INFO  Saved for snowflake_admin in ~/.pgpass (mode 600); ...
+```
+
+> **One password to care about.** Creating an instance returns credentials for two Postgres users: `snowflake_admin` and an application role. The lab uses only `snowflake_admin`, saves that password to `~/.pgpass`, and never displays it. Lost or rotated elsewhere? `task pg-reset-access`.
 
 ### Lab 1: Create the mirror (`task lab-1-create-mirror`)
 
 1. **Pre-flight (Postgres):** the source tables must be ordinary, `LOGGED`, and have a primary key, with types that map cleanly to Snowflake.
-2. **Grants (Snowflake):** `GRANT APPLICATION ROLE snowflake.postgres_mirror_admin` to `MIRROR_ADMIN_ROLE_NAME`, run as `ACCOUNTADMIN` and skipped if the role already holds it, and `GRANT USAGE ON POSTGRES INSTANCE ... TO APPLICATION snowflake`, run as the owning role. If you can't use `ACCOUNTADMIN`, the step prints the `GRANT` for an admin to run.
-3. **Pre-flight (Snowflake):** the instance is READY and owned by your role (mirror procedures require ownership), and the target database doesn't exist yet.
+2. **Grant (Snowflake):** `GRANT USAGE ON POSTGRES INSTANCE ... TO APPLICATION snowflake`, run as the owning role. (The `postgres_mirror_admin` application role was granted during setup.)
+3. **Pre-flight (Snowflake):** your role holds `postgres_mirror_admin`, the instance is READY and owned by your role (mirror procedures require ownership), and the target database doesn't exist yet.
 4. **`CALL SNOWFLAKE.POSTGRES.CREATE_MIRROR(...)`**: see [`002-create_mirror.sql`](tasks/snow-cli/sql/mirror/002-create_mirror.sql).
 5. **Initial snapshot:** waits until every table moves from `SNAPSHOTTING` to `REPLICATING`.
 6. **Confirm:** counts match in Snowflake (5 / 10 / 485). The analyst role gets read access through the `<TARGET>_ADMIN` database role.
@@ -194,7 +227,7 @@ Inserts `IoT-Gateway-Urgent` and puts `IoT-Gateway-1` into maintenance. `DEVICES
 
 ### Lab 7: Analytics on mirrored data (`task lab-7-analytics`)
 
-Mirrored tables are ordinary Snowflake tables with change tracking on, so you can build on them directly:
+Mirrored tables are ordinary Snowflake tables with change tracking on, so you can build on them directly. The dynamic table and semantic view are the DCM project `iot_mirror_analytics`, deployed here rather than during setup because they read the mirror's target database (lab-1) and the columns lab-3 adds. The agent is created with SQL afterwards, because DCM does not manage agents.
 
 - **Dynamic table** `SITE_HOURLY_METRICS`: hourly metrics per site and sensor type (end-to-end freshness = refresh interval + `TARGET_LAG`)
 - **Semantic view** `IOT_MIRROR_SV`: dimensions and metrics for Cortex Analyst
@@ -225,7 +258,11 @@ STREAM_BATCHES=12 STREAM_BATCH_SIZE=50 task stream-readings
 | Task | Description |
 |------|-------------|
 | `task validate-prerequisites` | Checks the env file, `snow` and its connection, `psql` 16+, and Python 3.9+ |
-| `task infrastructure-up` | Provisions the instance and lab objects only |
+| `task infrastructure-up` | Provisions the instance and lab objects only, then runs the readiness checklist |
+| `task setup-status` | Readiness checklist: PASS / FAIL / INFO for every setup object, with a fix for each |
+| `task setup-plan` | What DCM would create, alter, or drop for the setup objects (`iot_mirror_lab`); applies nothing |
+| `task analytics-plan` | The same for the lab-7 analytics (`iot_mirror_analytics`; needs lab-1 and lab-3) |
+| `task dcm-analyze` | Validates both DCM projects' definitions; applies nothing |
 | `task mirror-status` | Mirror health: status, apply lag, errors, per-table state, recent apply runs |
 | `task compare` | Row counts in Postgres, the target tables, and the `$live` views |
 | `task mirror-refresh` | Applies pending changes now (`REFRESH_MIRROR`) |
@@ -233,7 +270,7 @@ STREAM_BATCHES=12 STREAM_BATCH_SIZE=50 task stream-readings
 | `task stream-readings` | Load generator (see above) |
 | `task pg-shell` | Interactive `psql` on the lab database |
 | `task pg-instance-info` | Instance state, owner, size, and host (never credentials) |
-| `task pg-allow-my-ip` | Create mode: points the ingress rule at your current IP (new Wi-Fi, VPN) |
+| `task pg-allow-my-ip` | Create mode: redeploys `iot_mirror_lab` so the ingress rule allows your current IP (new Wi-Fi, VPN) |
 | `task pg-reset-access` | Rotates the Postgres password into `~/.pgpass` (asks to confirm) |
 
 Once `demo-up` has run, `psql "service=iot_mirror_lab"` works from anywhere.
@@ -268,9 +305,10 @@ Once `demo-up` has run, `psql "service=iot_mirror_lab"` works from anywhere.
                                                               │ change tracking
                                      ┌────────────────────────▼───────────────────────────────────┐
  Snowsight ─────────────────────────►│ POSTGRES_MIRROR_HOL.LAB   (lab-owned)                      │
-                                     │   notebook · ingress network rule · stage                  │
-                                     │   SITE_HOURLY_METRICS (dynamic table)                      │
-                                     │   IOT_MIRROR_SV (semantic view) · IOT_MIRROR_AGENT         │
+                                     │   DCM iot_mirror_lab:  stage · ingress network rule        │
+                                     │   DCM iot_mirror_analytics:  SITE_HOURLY_METRICS (dynamic  │
+                                     │     table) · IOT_MIRROR_SV (semantic view)                 │
+                                     │   SQL:  notebook · IOT_MIRROR_AGENT                        │
                                      └────────────────────────────────────────────────────────────┘
 ```
 
@@ -283,21 +321,24 @@ snowflake-postgres-hol/
 |   +-- mirror.env.template            # Configuration template
 |   +-- mirror.env                     # Your config (git-ignored)
 +-- tasks/
-|   +-- validate-prerequisites/        # env file, snow + connection, psql 16+, Python 3.9+
+|   +-- validate-prerequisites/        # env file, snow 3.17+ + connection, psql 16+, Python 3.9+
 |   +-- snow-cli/                      # Everything that runs against Snowflake
 |   |   +-- snowcli-tasks.yml
 |   |   +-- snowflake.yml              # Defaults for optional <% ctx.env.X %> placeholders
-|   |   +-- cmd/                       # run-init.sh, notebook generate/deploy scripts
+|   |   +-- cmd/                       # Notebook generate/deploy scripts
+|   |   +-- dcm/                       # DCM projects: manifest.yml + sources/definitions/*.sql
+|   |   |   +-- iot_mirror_lab/        # Setup: lab DB/schema/stage, warehouse, analyst role, ingress policy
+|   |   |   +-- iot_mirror_analytics/  # lab-7: dynamic table, semantic view, analyst grants
 |   |   +-- pyutil/
+|   |   |   +-- dcm/                   # Runs snow dcm with the identifier and -D variables from .env
 |   |   |   +-- snowclisp/             # Runs NNN-*.sql files in order with snow
 |   |   |   +-- pginstance/            # Instance lifecycle; writes ~/.pgpass, never prints secrets
 |   |   +-- sql/
-|   |   |   +-- init/                  # Warehouse, lab DB, analyst role; POSTGRES_INGRESS policy
+|   |   |   +-- init/                  # Home schema for the DCM project objects
 |   |   |   +-- mirror/                # 001 grants, 002 CREATE_MIRROR, 003 analyst read access
 |   |   |   +-- lab/                   # Snowflake-side query for each lab step
 |   |   |   +-- ops/                   # lab-6: ALTER / SUSPEND / RESUME / REFRESH, monitoring
-|   |   |   +-- analytics/             # lab-7: dynamic table, semantic view, agent, grants
-|   |   |   +-- teardown/
+|   |   |   +-- analytics/             # lab-7: Cortex Agent and its grant (not a DCM object type)
 |   |   +-- notebook/mirror_lab_notebook/
 |   |       +-- templates/             # Notebook + snowflake.yml templates
 |   |       +-- variables.json         # Placeholder -> env var mapping
@@ -314,17 +355,18 @@ snowflake-postgres-hol/
 |   |       +-- teardown/              # Drops only tables this lab created
 |   +-- lab/
 |       +-- lab-tasks.yml
-|       +-- pyutil/mirrorcheck/        # Polls both sides, prints convergence timelines
+|       +-- pyutil/mirrorcheck/        # Polls both sides, prints convergence timelines; setup checklist
 +-- output/                            # Scratch output (git-ignored)
 +-- README.md
 ```
 
 ## How It Works
 
-- **One env file, three consumers.** Task loads `.env/mirror.env` into the environment. Snowflake SQL reads it through `snow` templating (`<% ctx.env.MIRROR_NAME %>`), Postgres SQL through psql variables (`:"pg_schema"`, filled in by `psqlclisp.py`), and the notebook generator through `variables.json`. A missing required variable fails with "SQL rendering error" instead of running SQL against a placeholder.
+- **One env file, four consumers.** Task loads `.env/mirror.env` into the environment. Snowflake SQL reads it through `snow` templating (`<% ctx.env.MIRROR_NAME %>`), the DCM definitions through Jinja variables (`{{ lab_database }}`) that `pyutil/dcm/dcm.py` passes with `-D`, Postgres SQL through psql variables (`:"pg_schema"`, filled in by `psqlclisp.py`), and the notebook generator through `variables.json`. A missing required variable fails with "SQL rendering error" instead of running SQL against a placeholder.
+- **Declarative Snowflake objects.** The two DCM projects declare the desired state with `DEFINE` (`DEFINE DATABASE`, `DEFINE ROLE`, `DEFINE NETWORK RULE`, ...). A deploy creates, alters, or leaves each object as needed, so re-running setup converges instead of failing, and `snow dcm purge` drops exactly what a project manages. What DCM cannot manage stays as SQL: the Postgres instance, the mirror and its grants, and the Cortex Agent.
 - **Ordered SQL batches.** `snowclisp.py` and `psqlclisp.py` run `NNN-*.sql` files in numeric order and stop on the first error.
 - **Self-verifying steps.** `mirror_check.py` reads Postgres with `psql` and Snowflake with `snow`, and polls until the change is visible (counts, columns, table states) or `LAB_SYNC_TIMEOUT_SECONDS` expires.
-- **Re-runnable.** Setup seeds only empty tables, lab-3 skips DDL that already happened, lab-1 skips `CREATE_MIRROR` if the mirror exists, and teardown tolerates partial state.
+- **Re-runnable.** DCM deploys converge, setup seeds only empty tables, lab-3 skips DDL that already happened, lab-1 skips `CREATE_MIRROR` if the mirror exists, and teardown tolerates partial state.
 
 ## Security
 
@@ -332,8 +374,9 @@ snowflake-postgres-hol/
 2. **Verified TLS.** The instance CA certificate is saved to `~/.snowflake/postgres/certs/<service>.pem`, and connections use `sslmode=verify-ca`.
 3. **Least network exposure.** The `POSTGRES_INGRESS` rule allows a single `/32` by default, and ranges wider than `/8` are refused. It applies only to the Postgres instance, not to Snowflake logins.
 4. **Least privilege for readers.** Analysts read mirrored data through the `<TARGET>_ADMIN` database role, without owning anything.
-5. **Safe on shared instances.** In existing mode the lab refuses to adopt same-named tables it didn't create, and teardown drops only the tables it created (no `CASCADE`).
-6. **Never commit `.env/mirror.env`** (it is git-ignored). It holds names, not secrets.
+5. **Roles.** Everything runs as `MIRROR_ADMIN_ROLE_NAME` (`ACCOUNTADMIN` by default) to keep the lab short. In production, own databases, warehouses, and the instance with `SYSADMIN` (or a custom role granted to it), use functional roles like the analyst role for day-to-day work, and reserve `ACCOUNTADMIN` for account-level setup such as network policies and the `postgres_mirror_admin` grant.
+6. **Safe on shared instances.** In existing mode the lab refuses to adopt same-named tables it didn't create, and teardown drops only the tables it created (no `CASCADE`).
+7. **Never commit `.env/mirror.env`** (it is git-ignored). It holds names, not secrets.
 
 ## Cost and Cleanup
 
@@ -341,13 +384,16 @@ snowflake-postgres-hol/
 - **Mirror apply task:** serverless compute on every apply run. A shorter `refresh_interval` costs more; `$live` gives low-latency reads without shortening it.
 - **Storage:** the change logs live on the Postgres instance, and the target tables in Snowflake.
 
-Run `task demo-teardown` when you finish. Teardown order matters and is handled for you: the mirror must be dropped before the instance, and the network policy after it.
+Run `task demo-teardown` when you finish. Teardown order matters and is handled for you: `iot_mirror_analytics` is purged before `iot_mirror_lab` (it reads its schema), the mirror is dropped before the instance, and the instance before `iot_mirror_lab` purges the network policy attached to it. The warehouse is dropped only when `DEMO_WAREHOUSE_MANAGED=true`; with `false`, DCM never defines it, so an existing warehouse is safe. The DCM project home (`UTIL.DCM_PROJECT_ARCHIVE`) is left in place.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
 | **Task not found** | Install Task: `brew install go-task` |
+| **`Snowflake CLI ... is too old`** | DCM needs `snow` 3.17 or later: `snow upgrade` (direct install), or reinstall from the Snowflake CLI docs |
+| **`snow dcm deploy failed`** | Run `task setup-plan` (or `task analytics-plan`) and read `tasks/snow-cli/dcm/<project>/out/plan_result.json`; `task dcm-analyze` lists definition errors |
+| **`analytics-plan` / lab-7 fails on missing columns or database** | `iot_mirror_analytics` reads the mirror (lab-1) and `SITE_LOCATION` / `STATUS` (lab-3): run those first |
 | **`psql` not found** | `brew install libpq && brew link --force libpq` |
 | **`Env file not found`** | `cp .env/mirror.env.template .env/mirror.env` |
 | **`SQL rendering error`** | A required variable is missing from `.env/mirror.env`; run `task validate-prerequisites` |
@@ -357,7 +403,8 @@ Run `task demo-teardown` when you finish. Teardown order matters and is handled 
 | **`permission denied to create extension` on `CREATE_MIRROR`** | The instance predates mirroring. Refresh it in Snowsight (Postgres → instance → Manage); there is no SQL for this. New instances don't need it. |
 | **`Application role 'SNOWFLAKE.POSTGRES_MIRROR_ADMIN' does not exist`** | New accounts can take up to an hour to provision the `snowflake` application |
 | **Mirror procedures fail on an existing instance** | The caller must **own** the instance: set `MIRROR_ADMIN_ROLE_NAME` to the owning role |
-| **`Could not grant postgres_mirror_admin`** | Your user can't use `ACCOUNTADMIN`: have an account admin run the printed `GRANT APPLICATION ROLE ...`, then re-run lab-1 |
+| **`Could not grant postgres_mirror_admin`** | Your user can't use `ACCOUNTADMIN`: have an account admin run the printed `GRANT APPLICATION ROLE ...`, then re-run `task infrastructure-up` |
+| **`setup-status` shows FAIL or WAIT** | Each row prints its fix. `WAIT` on the instance means it is still provisioning: run `task setup-status` again in a minute |
 | **`PG_COMPUTE_FAMILY=STANDARD_M is not available on Azure`** | Set `PG_COMPUTE_FAMILY=STANDARD_L` and re-run `demo-up` |
 | **A step times out waiting** | `task mirror-status` for errors and lag; `task mirror-refresh` to apply now; or raise `LAB_SYNC_TIMEOUT_SECONDS` |
 | **Mirror left suspended (lab-6 interrupted)** | `task mirror-resume` |
@@ -399,8 +446,9 @@ The lab saves its Postgres connection in the standard `~/.pg_service.conf` / `~/
 | Network access | Not covered | `POSTGRES_INGRESS` network policy for your IP, plus `task pg-allow-my-ip` |
 | Extensions | `CREATE EXTENSION snowflake_cdc CASCADE` | No manual step: per the docs, new instances include the required extensions and `CREATE_MIRROR` provisions the rest. Lab-1 shows what it built. |
 | Verification | "Wait about a minute, then check" | Each step polls both sides and asserts convergence, printing a Postgres / target / `$live` timeline |
-| Re-runs | Not covered | Pre-flight checks, the target-database reuse rule, idempotent setup and teardown |
-| Teardown | `DROP_MIRROR('iot_mirror', TRUE)` + `DROP POSTGRES INSTANCE` | Same order, with the named argument `drop_target_database => TRUE`, plus the network policy, lab objects, and local connection entries |
+| Re-runs | Not covered | Pre-flight checks, the target-database reuse rule, DCM deploys that converge, idempotent teardown |
+| Snowflake objects | Created by hand | Two DCM projects (`iot_mirror_lab`, `iot_mirror_analytics`), deployed and purged by the tasks |
+| Teardown | `DROP_MIRROR('iot_mirror', TRUE)` + `DROP POSTGRES INSTANCE` | Same order, with the named argument `drop_target_database => TRUE`, plus `snow dcm purge` of both projects and the local connection entries |
 
 ### Feature coverage matrix
 
@@ -420,14 +468,15 @@ The lab saves its Postgres connection in the standard `~/.pg_service.conf` / `~/
 
 | Capability | Where |
 |------------|-------|
-| Automated instance, network policy, and secure connection setup | `demo-up` (`pg_instance.py`, `sql/init/network_policy.sql`) |
+| Automated instance, network policy, and secure connection setup | `demo-up` (`pg_instance.py`, DCM `iot_mirror_lab/sources/definitions/network.sql`) |
+| Snowflake objects managed as DCM projects (`DEFINE`, plan, deploy, purge) | `tasks/snow-cli/dcm/`, `task setup-plan` |
 | Postgres-side view of the mirror (publication, slot, change logs) | lab-1 (`psql-cli/sql/inspect/mirror_objects.sql`) |
 | Update pairs in `$changes` (`_XID`, `_IS_UPDATE`) | lab-5 |
 | `ALTER_MIRROR` (refresh interval, `add_tables`), `SUSPEND` / `RESUME` / `REFRESH_MIRROR` | lab-6 |
 | Monitoring: `DESCRIBE_MIRROR`, `QUERY_ADMIN_LOG`, apply task history | lab-6, `task mirror-status` |
 | Read-access delegation with the `<TARGET>_ADMIN` database role | lab-1, notebook section 8 |
 | Continuous load generator | `task stream-readings` |
-| Dynamic table, semantic view, and Cortex Agent on mirrored data | lab-7 |
+| Dynamic table, semantic view (DCM), and Cortex Agent on mirrored data | lab-7 |
 | Iceberg target tables | `MIRROR_TARGET_TABLE_TYPE=ICEBERG` |
 
 **Beyond both the guide and this lab:**

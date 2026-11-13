@@ -1,0 +1,40 @@
+# DCM project iot_mirror_analytics: the lab-7 analytics layer on the mirrored tables.
+#
+#   the SITE_HOURLY_METRICS dynamic table, the IOT_MIRROR_SV semantic view, and the
+#   analyst role's SELECT on both, all in the lab schema next to the notebook.
+#
+# Deployed in lab-7, not during setup: these definitions read the mirror's target
+# database, which CREATE_MIRROR creates in lab-1, and the SITE_LOCATION and STATUS
+# columns that lab-3 adds. DCM does not order deployments across projects, so
+# iot_mirror_lab (../iot_mirror_lab) is deployed first, and this project is purged
+# before it on teardown.
+#
+# The Cortex Agent over the semantic view is not a DCM object type; lab-7 creates it
+# after this deploy (sql/analytics/).
+#
+# .env/mirror.env is the single source of truth. pyutil/dcm/dcm.py passes the project
+# identifier (DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA.DCM_ANALYTICS_PROJECT_NAME) and
+# every variable below from it with -D, so the values here are only documentation and
+# the defaults for running snow dcm by hand.
+manifest_version: 2
+type: DCM_PROJECT
+default_target: 'DEV'
+
+targets:
+  DEV:
+    # The fully qualified name of the DCM project object (overridden from .env).
+    project_name: 'UTIL.DCM_PROJECT_ARCHIVE.IOT_MIRROR_ANALYTICS'
+
+templating:
+  defaults:
+    # DEMO_DATABASE_NAME, DEMO_SCHEMA_NAME, DEMO_WAREHOUSE_NAME, DEMO_ANALYST_ROLE_NAME
+    lab_database: 'POSTGRES_MIRROR_HOL'
+    lab_schema: 'LAB'
+    warehouse: 'IOT_MIRROR_LAB_WH'
+    analyst_role: 'IOT_MIRROR_ANALYST'
+    # MIRROR_TARGET_DATABASE_NAME and PG_SCHEMA_NAME: where the mirrored tables are
+    mirror_database: 'IOT_MIRROR_DB_01'
+    mirror_schema: 'public'
+    # DEMO_DYNAMIC_TABLE_NAME, DEMO_SEMANTIC_VIEW_NAME
+    dynamic_table: 'SITE_HOURLY_METRICS'
+    semantic_view: 'IOT_MIRROR_SV'

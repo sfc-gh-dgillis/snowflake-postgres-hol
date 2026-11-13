@@ -1,26 +1,18 @@
--- ========================================================================
--- 002-create_semantic_view.sql   (Snowflake, lab-7)
---
--- A semantic layer over the mirrored tables: business-friendly dimensions
--- and metrics that Cortex Analyst (and the lab-7 agent) turn into SQL.
--- Because it reads the target tables, answers are as fresh as the mirror.
+-- A semantic layer over the mirrored tables: business-friendly dimensions and metrics
+-- that Cortex Analyst (and the lab-7 agent) turn into SQL. Because it reads the target
+-- tables, answers are as fresh as the mirror. Uses SITE_LOCATION and STATUS, so run
+-- lab-3 (schema changes) first.
 -- See: https://docs.snowflake.com/en/sql-reference/sql/create-semantic-view
--- ========================================================================
 
-USE ROLE <% ctx.env.MIRROR_ADMIN_ROLE_NAME %>;
-USE WAREHOUSE <% ctx.env.DEMO_WAREHOUSE_NAME %>;
-USE DATABASE <% ctx.env.DEMO_DATABASE_NAME %>;
-USE SCHEMA <% ctx.env.DEMO_SCHEMA_NAME %>;
-
-CREATE OR REPLACE SEMANTIC VIEW <% ctx.env.DEMO_SEMANTIC_VIEW_NAME %>
+DEFINE SEMANTIC VIEW {{ lab_database }}.{{ lab_schema }}.{{ semantic_view }}
     TABLES (
-        DEVICES AS <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.DEVICES
+        DEVICES AS {{ mirror_database }}.{{ mirror_schema }}.DEVICES
             PRIMARY KEY (DEVICE_ID)
             COMMENT = 'IoT gateways, mirrored from Snowflake Postgres',
-        SENSORS AS <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.SENSORS
+        SENSORS AS {{ mirror_database }}.{{ mirror_schema }}.SENSORS
             PRIMARY KEY (SENSOR_ID)
             COMMENT = 'Sensors attached to each device (two per device)',
-        READINGS AS <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.READINGS
+        READINGS AS {{ mirror_database }}.{{ mirror_schema }}.READINGS
             PRIMARY KEY (READING_ID)
             COMMENT = 'Sensor readings, replicated continuously from Postgres'
     )

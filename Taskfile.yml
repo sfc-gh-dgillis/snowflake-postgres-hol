@@ -37,7 +37,7 @@ tasks:
       - task --list
 
   validate-prerequisites:
-    desc: Checks the env file, snow CLI and its connection, psql 16+, and Python 3.9+.
+    desc: Checks the env file, snow CLI 3.17+ and its connection, psql 16+, and Python 3.9+.
     cmds:
       - task: validate-prerequisites:all
         vars:
@@ -48,38 +48,54 @@ tasks:
   # ------------------------------------------------------------------
 
   demo-up:
-    desc: Provisions Postgres (routes by POSTGRES_INSTANCE_MODE), seeds the IoT tables, and deploys the notebook.
+    desc: Provisions Postgres (routes by POSTGRES_INSTANCE_MODE), seeds the IoT tables, deploys the notebook, and checks readiness.
     cmds:
       - task: validate-prerequisites
       - task: infrastructure-up-{{.INSTANCE_MODE}}
       - task: psql-cli:check-connection
       - task: psql-cli:setup
       - task: notebook-up
+      - task: lab:setup-status
       - task: banner
         vars:
           TITLE: 'Setup complete: the IoT tables are live in Postgres.'
           TEXT: 'Next: task lab-1-create-mirror  (and open the notebook link above in Snowsight)'
 
   infrastructure-up:
-    desc: Provisions the Postgres instance and Snowflake lab objects only (routes by POSTGRES_INSTANCE_MODE).
+    desc: Provisions the Postgres instance and Snowflake lab objects only (routes by POSTGRES_INSTANCE_MODE), then checks readiness.
     cmds:
       - task: validate-prerequisites
       - task: infrastructure-up-{{.INSTANCE_MODE}}
+      - task: lab:setup-status
 
   infrastructure-up-create:
-    desc: Creates the lab objects, a POSTGRES_INGRESS network policy for your IP, and a new Postgres instance.
+    desc: Deploys the DCM project iot_mirror_lab (lab objects plus a POSTGRES_INGRESS network policy for your IP), grants mirror admin, and creates a new Postgres instance.
     internal: true
     cmds:
-      - task: snow-cli:run-init
-      - task: snow-cli:apply-postgres-network-policy
+      - task: dcm-setup-up
+      # Before the slow instance create: a missing snowflake application (new
+      # accounts, up to an hour) should fail setup, not lab-1.
+      - task: lab:grant-mirror-admin
+      # After the deploy: CREATE POSTGRES INSTANCE attaches the network policy it defined.
       - task: snow-cli:pg-instance-create
 
   infrastructure-up-existing:
-    desc: Creates the lab objects and attaches to a Postgres instance you already own.
+    desc: Deploys the DCM project iot_mirror_lab (lab objects only), grants mirror admin, and attaches to a Postgres instance you already own.
     internal: true
     cmds:
-      - task: snow-cli:run-init
+      - task: dcm-setup-up
+      - task: lab:grant-mirror-admin
       - task: snow-cli:pg-instance-attach
+
+  dcm-setup-up:
+    desc: Creates the DCM project home, then registers and deploys iot_mirror_lab.
+    internal: true
+    cmds:
+      - task: snow-cli:dcm-project-home
+      - task: snow-cli:dcm-up
+        vars:
+          DCM_PROJECT: iot_mirror_lab
+          DCM_ALIAS: setup
 
   notebook-up:
     desc: Generates the companion notebook from its template, deploys it, and prints its URL.
@@ -101,7 +117,6 @@ tasks:
           TITLE: 'Lab 1 - Create the mirror'
           TEXT: 'One procedure call replicates devices, sensors and readings into Snowflake.'
       - task: psql-cli:preflight
-      - task: lab:grant-mirror-admin
       - task: snow-cli:mirror-grants
       - task: lab:preflight
       - task: lab:create-mirror
@@ -242,12 +257,17 @@ tasks:
           SQL_FILE: sql/ops/monitoring.sql
 
   lab-7-analytics:
-    desc: 'Lab 7: dynamic table, semantic view, and Cortex Agent on the mirrored data.'
+    desc: 'Lab 7: dynamic table and semantic view (DCM project iot_mirror_analytics) and a Cortex Agent on the mirrored data.'
     cmds:
       - task: banner
         vars:
           TITLE: 'Lab 7 - Analytics on mirrored data'
           TEXT: 'Mirrored tables are ordinary Snowflake tables: build pipelines and AI on them directly.'
+      # The dynamic table and semantic view (DCM), then the agent DCM does not manage
+      - task: snow-cli:dcm-up
+        vars:
+          DCM_PROJECT: iot_mirror_analytics
+          DCM_ALIAS: lab-7
       - task: snow-cli:sort-and-process-sql-folder
         vars:
           SQL_SORT_PROCESS_DIR: sql/analytics
@@ -278,6 +298,11 @@ tasks:
     desc: 'Load generator: streams readings into Postgres (STREAM_* settings). Watch them arrive in Snowflake.'
     cmds:
       - task: psql-cli:stream-readings
+
+  setup-status:
+    desc: Readiness checklist for the lab setup - PASS / FAIL / INFO with a fix for each item.
+    cmds:
+      - task: lab:setup-status
 
   mirror-status:
     desc: Shows mirror health - status, lag, errors, table states, recent apply runs.
@@ -312,12 +337,39 @@ tasks:
       - task: snow-cli:pg-instance-info
 
   pg-allow-my-ip:
-    desc: 'Create mode: points the Postgres ingress rule at your current IP (or PG_ALLOWED_CIDR).'
+    desc: 'Create mode: redeploys iot_mirror_lab so the Postgres ingress rule allows your current IP (or PG_ALLOWED_CIDR).'
     preconditions:
       - sh: '[ "{{.INSTANCE_MODE}}" = "create" ]'
         msg: 'pg-allow-my-ip manages the lab network policy in create mode only. In existing mode, update the network policy on your own instance.'
     cmds:
-      - task: snow-cli:apply-postgres-network-policy
+      - task: snow-cli:dcm-deploy
+        vars:
+          DCM_PROJECT: iot_mirror_lab
+          DCM_ALIAS: pg-allow-my-ip
+
+  setup-plan:
+    desc: Shows what DCM would create, alter, or drop for the setup objects (project iot_mirror_lab). Applies nothing.
+    cmds:
+      - task: snow-cli:dcm-plan
+        vars:
+          DCM_PROJECT: iot_mirror_lab
+
+  analytics-plan:
+    desc: Shows what DCM would create, alter, or drop for the lab-7 analytics (project iot_mirror_analytics; needs lab-1 and lab-3). Applies nothing.
+    cmds:
+      - task: snow-cli:dcm-plan
+        vars:
+          DCM_PROJECT: iot_mirror_analytics
+
+  dcm-analyze:
+    desc: Validates both DCM projects' definitions (iot_mirror_analytics needs lab-1 and lab-3). Applies nothing.
+    cmds:
+      - task: snow-cli:dcm-analyze
+        vars:
+          DCM_PROJECT: iot_mirror_lab
+      - task: snow-cli:dcm-analyze
+        vars:
+          DCM_PROJECT: iot_mirror_analytics
 
   pg-reset-access:
     desc: Rotates the Postgres password for PG_USER and saves it to ~/.pgpass (never displayed).
@@ -331,7 +383,7 @@ tasks:
 
   demo-teardown:
     desc: Tears down the lab (routes by POSTGRES_INSTANCE_MODE).
-    prompt: This drops the mirror, its target database, and the lab database (create mode also drops the Postgres instance). Continue?
+    prompt: This purges both DCM projects (the lab database, the analyst role, and the warehouse if the lab owns it) and drops the mirror and its target database (create mode also drops the Postgres instance and network policy). Continue?
     cmds:
       - task: validate-prerequisites:env
         vars:
@@ -343,22 +395,40 @@ tasks:
           TEXT: 'Target database names can never be reused: bump MIRROR_TARGET_DATABASE_NAME before the next demo-up.'
 
   demo-teardown-create:
-    desc: Drops the mirror, the Postgres instance, the network policy, the lab objects, and local connection entries.
+    desc: Purges iot_mirror_analytics, drops the mirror and the Postgres instance, purges iot_mirror_lab (lab objects and network policy), and removes local connection entries.
     internal: true
     cmds:
+      - task: dcm-analytics-down
       - task: lab:drop-mirror
       - task: snow-cli:pg-instance-drop
-      - task: snow-cli:drop-network-policy
-      - task: snow-cli:drop-lab-objects
+      # After the instance: an attached network policy cannot be dropped.
+      - task: dcm-setup-down
       - task: snow-cli:pg-instance-forget
 
   demo-teardown-existing:
-    desc: Drops the mirror, the lab's Postgres tables, and the lab objects; keeps your instance and connection.
+    desc: Purges iot_mirror_analytics, drops the mirror and the lab's Postgres tables, and purges iot_mirror_lab; keeps your instance and connection.
     internal: true
     cmds:
+      - task: dcm-analytics-down
       - task: lab:drop-mirror
       - task: psql-cli:drop-lab-tables
-      - task: snow-cli:drop-lab-objects
+      - task: dcm-setup-down
+
+  # iot_mirror_analytics reads iot_mirror_lab's schema, so it is purged first.
+  # The project home (DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA) is left in place.
+  dcm-analytics-down:
+    internal: true
+    cmds:
+      - task: snow-cli:dcm-down
+        vars:
+          DCM_PROJECT: iot_mirror_analytics
+
+  dcm-setup-down:
+    internal: true
+    cmds:
+      - task: snow-cli:dcm-down
+        vars:
+          DCM_PROJECT: iot_mirror_lab
 
   banner:
     internal: true

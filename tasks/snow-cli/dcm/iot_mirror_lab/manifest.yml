@@ -1,0 +1,48 @@
+# DCM project iot_mirror_lab: the Snowflake objects the lab needs before lab-1.
+#
+#   lab database and schema, the notebook stage, the warehouse (when the lab owns it),
+#   the analyst role and its grants, and in create mode the POSTGRES_INGRESS network rule
+#   and policy for the Postgres instance.
+#
+# The Postgres instance, the mirror, and its grants are not DCM object types; the tasks
+# create them (pg_instance.py, mirror_check.py, sql/mirror/). iot_mirror_analytics
+# (../iot_mirror_analytics) is deployed in lab-7 and purged before this project.
+#
+# .env/mirror.env is the single source of truth. pyutil/dcm/dcm.py passes the project
+# identifier (DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA.DCM_SETUP_PROJECT_NAME) and every
+# variable below from it with -D, so the values here are only documentation and the
+# defaults for running snow dcm by hand.
+manifest_version: 2
+type: DCM_PROJECT
+default_target: 'DEV'
+
+targets:
+  DEV:
+    # The fully qualified name of the DCM project object (overridden from .env).
+    # No account_identifier or project_owner: the lab runs on any account, as
+    # MIRROR_ADMIN_ROLE_NAME.
+    project_name: 'UTIL.DCM_PROJECT_ARCHIVE.IOT_MIRROR_LAB'
+
+templating:
+  defaults:
+    # DEMO_DATABASE_NAME, DEMO_DATABASE_DDL_COMMENT, DEMO_SCHEMA_NAME
+    lab_database: 'POSTGRES_MIRROR_HOL'
+    lab_database_comment: 'Snowflake Postgres mirror hands-on lab'
+    lab_schema: 'LAB'
+    # DEMO_INTERNAL_NAMED_STAGE, DEMO_INTERNAL_NAMED_STAGE_COMMENT
+    lab_stage: 'LAB_STAGE'
+    lab_stage_comment: 'Internal stage for notebook artifacts'
+    # DEMO_WAREHOUSE_NAME, DEMO_WAREHOUSE_MANAGED ('true': this project defines the
+    # warehouse and a purge drops it; 'false': it only grants usage on yours)
+    warehouse: 'IOT_MIRROR_LAB_WH'
+    warehouse_managed: 'true'
+    # DEMO_ANALYST_ROLE_NAME, and the user running the lab (CURRENT_USER())
+    analyst_role: 'IOT_MIRROR_ANALYST'
+    setup_user: 'LAB_USER'
+    # POSTGRES_INSTANCE_MODE: the network rule and policy exist in create mode only
+    instance_mode: 'create'
+    # PG_NETWORK_RULE_NAME, PG_NETWORK_POLICY_NAME, and PG_ALLOWED_CIDR resolved to a
+    # CIDR (AUTO = CURRENT_IP_ADDRESS()/32)
+    pg_network_rule: 'IOT_MIRROR_LAB_PG_INGRESS_RULE'
+    pg_network_policy: 'IOT_MIRROR_LAB_PG_INGRESS_POLICY'
+    pg_allowed_cidr: '203.0.113.7/32'

@@ -9,10 +9,16 @@ vars:
 tasks:
 
   grant-mirror-admin:
-    desc: Grants the postgres_mirror_admin application role to MIRROR_ADMIN_ROLE_NAME (as ACCOUNTADMIN) unless it already has it.
+    desc: Grants the postgres_mirror_admin application role to MIRROR_ADMIN_ROLE_NAME (as ACCOUNTADMIN) unless it already has it. Runs during setup.
     internal: true
     cmds:
       - '{{.CHECK}} grant-mirror-admin'
+
+  setup-status:
+    desc: Readiness checklist for the lab setup (PASS / FAIL / INFO with a fix for each item).
+    internal: true
+    cmds:
+      - '{{.CHECK}} setup-status'
 
   preflight:
     desc: Checks the instance (READY, owned by MIRROR_ADMIN_ROLE_NAME) and that the target database is new.

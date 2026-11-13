@@ -44,3 +44,6 @@ output/*
 # Generated notebook output (created by the snow-cli:generate-notebook task)
 tasks/snow-cli/notebook/mirror_lab_notebook/generated/*
 !tasks/snow-cli/notebook/mirror_lab_notebook/generated/.gitkeep
+
+# DCM plan output written by --save-output (task setup-plan / analytics-plan)
+tasks/snow-cli/dcm/*/out/

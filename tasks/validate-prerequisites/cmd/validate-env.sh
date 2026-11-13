@@ -22,6 +22,11 @@ REQUIRED_VARS=(
   "CLI_CONNECTION_NAME"
   "MIRROR_ADMIN_ROLE_NAME"
   "DEMO_WAREHOUSE_NAME"
+  "DEMO_WAREHOUSE_MANAGED"
+  "DCM_PROJECT_DATABASE"
+  "DCM_PROJECT_SCHEMA"
+  "DCM_SETUP_PROJECT_NAME"
+  "DCM_ANALYTICS_PROJECT_NAME"
   "DEMO_DATABASE_NAME"
   "DEMO_DATABASE_DDL_COMMENT"
   "DEMO_SCHEMA_NAME"
@@ -72,7 +77,8 @@ SF_IDENTIFIER='^[A-Za-z_][A-Za-z0-9_$]*$'
 for VAR in MIRROR_ADMIN_ROLE_NAME DEMO_WAREHOUSE_NAME DEMO_DATABASE_NAME DEMO_SCHEMA_NAME \
            DEMO_INTERNAL_NAMED_STAGE DEMO_NOTEBOOK_NAME DEMO_ANALYST_ROLE_NAME \
            MIRROR_TARGET_DATABASE_NAME DEMO_DYNAMIC_TABLE_NAME DEMO_SEMANTIC_VIEW_NAME \
-           DEMO_AGENT_NAME PG_NETWORK_RULE_NAME PG_NETWORK_POLICY_NAME; do
+           DEMO_AGENT_NAME PG_NETWORK_RULE_NAME PG_NETWORK_POLICY_NAME \
+           DCM_PROJECT_DATABASE DCM_PROJECT_SCHEMA DCM_SETUP_PROJECT_NAME DCM_ANALYTICS_PROJECT_NAME; do
   check_format "$VAR" "$SF_IDENTIFIER" "use an unquoted Snowflake identifier (letters, digits, _ and \$)"
 done
 
@@ -99,6 +105,12 @@ check_format MIRROR_REFRESH_INTERVAL "$INTERVAL_REGEX" "must be one of '30 secon
 check_format MIRROR_FAST_REFRESH_INTERVAL "$INTERVAL_REGEX" "must be one of '30 seconds', '1 minute', '10 minutes', '1 hour', '1 day'"
 
 check_format MIRROR_TARGET_TABLE_TYPE '^(SNOWFLAKE|ICEBERG)$' "must be SNOWFLAKE or ICEBERG"
+check_format DEMO_WAREHOUSE_MANAGED '^(true|false)$' "must be true (the lab creates and drops the warehouse) or false (an existing warehouse)"
+
+# Passed to DCM as -D "name='value'", so a single quote would break the quoting
+for VAR in DEMO_DATABASE_DDL_COMMENT DEMO_INTERNAL_NAMED_STAGE_COMMENT; do
+  check_format "$VAR" "^[^']*$" "must not contain a single quote"
+done
 
 for VAR in LAB_SYNC_TIMEOUT_SECONDS LAB_POLL_INTERVAL_SECONDS STREAM_INTERVAL_SECONDS STREAM_BATCHES STREAM_BATCH_SIZE; do
   check_format "$VAR" '^[1-9][0-9]*$' "must be a positive integer"
@@ -111,6 +123,7 @@ if [ "$MODE" = "create" ]; then
     check_format PG_COMPUTE_FAMILY '^(STANDARD|HIGHMEM)_[0-9A-Z]+$' "use a STANDARD_* or HIGHMEM_* compute family"
   fi
   check_format PG_STORAGE_SIZE_GB '^[0-9]+$' "must be a whole number of GB"
+  check_format PG_POSTGRES_VERSION '^[1-9][0-9]*$' "must be a Postgres major version such as 18, or empty for the platform default"
   if [[ "${PG_STORAGE_SIZE_GB:-}" =~ ^[0-9]+$ ]] && { [ "$PG_STORAGE_SIZE_GB" -lt 10 ] || [ "$PG_STORAGE_SIZE_GB" -gt 65535 ]; }; then
     ERRORS+=("PG_STORAGE_SIZE_GB must be between 10 and 65535")
   fi

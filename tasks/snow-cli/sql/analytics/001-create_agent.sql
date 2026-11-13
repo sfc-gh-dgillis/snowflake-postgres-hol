@@ -1,10 +1,14 @@
 -- ========================================================================
--- 003-create_agent.sql   (Snowflake, lab-7)
+-- 001-create_agent.sql   (Snowflake, lab-7)
 --
 -- A Cortex Agent that answers questions about the mirrored IoT data through
 -- the semantic view. Cortex Agents require Enterprise Edition or higher.
 -- Try it in Snowsight (the Agents page under AI and ML) or Snowflake Intelligence.
 -- See: https://docs.snowflake.com/en/sql-reference/sql/create-agent
+--
+-- Agents are not a DCM object type, so this runs after the DCM project
+-- iot_mirror_analytics has deployed the dynamic table and semantic view. It is
+-- dropped with the lab database when iot_mirror_lab is purged.
 --
 -- If you see "None of the preferred models are authorized or available in
 -- your region", enable cross-region inference (data stays in your region):

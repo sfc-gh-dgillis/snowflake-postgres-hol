@@ -488,6 +488,9 @@ def cmd_create(args: argparse.Namespace) -> None:
         raise LabError("BURSTABLE compute families are not supported for mirroring")
     storage = int(env("PG_STORAGE_SIZE_GB"))
     policy = env("PG_NETWORK_POLICY_NAME")
+    version = os.environ.get("PG_POSTGRES_VERSION", "").strip()
+    if version and not version.isdigit():
+        raise LabError(f"PG_POSTGRES_VERSION={version} must be a major version such as 18, or empty")
 
     check_feature()
     instance = show_instance(name)
@@ -503,13 +506,15 @@ def cmd_create(args: argparse.Namespace) -> None:
     else:
         check_family_available(family)
         print(f"Creating Snowflake Postgres instance {name} "
-              f"({family}, {storage} GB, network policy {policy})...")
+              f"({family}, {storage} GB, Postgres {version or 'platform default'}, "
+              f"network policy {policy}). Provisioning typically takes 3-5 minutes...")
         rows = run_snow_sql(
             f"CREATE POSTGRES INSTANCE {quote_ident(name)}\n"
             f"  COMPUTE_FAMILY = '{family}'\n"
             f"  STORAGE_SIZE_GB = {storage}\n"
             f"  AUTHENTICATION_AUTHORITY = POSTGRES\n"
-            f"  NETWORK_POLICY = '{policy}'\n"
+            + (f"  POSTGRES_VERSION = {version}\n" if version else "")
+            + f"  NETWORK_POLICY = '{policy}'\n"
             f"  COMMENT = 'Snowflake Postgres mirror HOL source instance'"
         )
         host = find_host(rows)
