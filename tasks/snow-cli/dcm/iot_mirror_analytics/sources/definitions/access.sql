@@ -1,5 +1,5 @@
 -- The analyst role (defined by iot_mirror_lab) reads the mirrored tables through the
--- <TARGET>_ADMIN database role (lab-1); here it gets the analytics layer. The agent's
+-- <TARGET>_ADMIN database role (step 1); here it gets the analytics layer. The agent's
 -- USAGE grant is in sql/analytics/, with the agent.
 
 GRANT SELECT ON DYNAMIC TABLE {{ lab_database }}.{{ lab_schema }}.{{ dynamic_table }}

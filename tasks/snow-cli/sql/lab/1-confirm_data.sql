@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 1 - Confirm data in Snowflake
+-- Step 1 - Confirm data in Snowflake
 --
 -- CREATE_MIRROR created the target database with, for each source table:
 --   <TABLE>          materialized target table (updated every refresh_interval)

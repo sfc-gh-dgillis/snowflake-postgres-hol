@@ -1,5 +1,5 @@
 -- ========================================================================
--- 003-grant_analyst_read.sql   (Snowflake, lab-1)
+-- 003-grant_analyst_read.sql   (Snowflake, step 1)
 --
 -- Reading mirrored data is governed by the <TARGET>_ADMIN database role
 -- inside the target database (SELECT on every target table, $changes

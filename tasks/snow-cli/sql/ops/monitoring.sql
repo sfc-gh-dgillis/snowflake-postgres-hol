@@ -1,5 +1,5 @@
 -- ========================================================================
--- monitoring.sql   (Snowflake, lab-6 and `task mirror-status`)
+-- monitoring.sql   (Snowflake, step 6 and `task mirror-status`)
 --
 -- Where to look when a mirror misbehaves:
 --   * DESCRIBE_MIRROR: status, apply lag, last error (NULL = healthy)

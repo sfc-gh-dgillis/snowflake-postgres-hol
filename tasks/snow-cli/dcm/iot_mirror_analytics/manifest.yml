@@ -1,15 +1,15 @@
-# DCM project iot_mirror_analytics: the lab-7 analytics layer on the mirrored tables.
+# DCM project iot_mirror_analytics: the step 7 analytics layer on the mirrored tables.
 #
 #   the SITE_HOURLY_METRICS dynamic table, the IOT_MIRROR_SV semantic view, and the
 #   analyst role's SELECT on both, all in the lab schema next to the notebook.
 #
-# Deployed in lab-7, not during setup: these definitions read the mirror's target
-# database, which CREATE_MIRROR creates in lab-1, and the SITE_LOCATION and STATUS
-# columns that lab-3 adds. DCM does not order deployments across projects, so
+# Deployed in step 7, not during setup: these definitions read the mirror's target
+# database, which CREATE_MIRROR creates in step 1, and the SITE_LOCATION and STATUS
+# columns that step 3 adds. DCM does not order deployments across projects, so
 # iot_mirror_lab (../iot_mirror_lab) is deployed first, and this project is purged
 # before it on teardown.
 #
-# The Cortex Agent over the semantic view is not a DCM object type; lab-7 creates it
+# The Cortex Agent over the semantic view is not a DCM object type; step 7 creates it
 # after this deploy (sql/analytics/).
 #
 # .env/mirror.env is the single source of truth. pyutil/dcm/dcm.py passes the project

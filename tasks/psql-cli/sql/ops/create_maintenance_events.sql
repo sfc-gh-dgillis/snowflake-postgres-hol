@@ -1,5 +1,5 @@
 -- ========================================================================
--- create_maintenance_events.sql   (Postgres, lab-6)
+-- create_maintenance_events.sql   (Postgres, step 6)
 --
 -- A brand-new source table. The mirror uses table-level scope
 -- (postgres_tables), so new tables are NOT mirrored until you add them with

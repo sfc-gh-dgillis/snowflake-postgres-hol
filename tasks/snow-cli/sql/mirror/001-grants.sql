@@ -1,12 +1,12 @@
 -- ========================================================================
--- 001-grants.sql   (Snowflake, lab-1)
+-- 001-grants.sql   (Snowflake, step 1)
 --
 -- Grants that managed mirroring needs before CREATE_MIRROR:
 --
 --  1. The postgres_mirror_admin application role lets a role create, alter,
 --     drop, and monitor mirrors. ACCOUNTADMIN grants it, so setup (demo-up /
 --     infrastructure-up) runs that grant (`mirror_check.py grant-mirror-admin`),
---     as ACCOUNTADMIN, and lab-1's preflight confirms it:
+--     as ACCOUNTADMIN, and step 1's preflight confirms it:
 --       GRANT APPLICATION ROLE SNOWFLAKE.POSTGRES_MIRROR_ADMIN
 --           TO ROLE <MIRROR_ADMIN_ROLE_NAME>;
 --     (The caller must also OWN the source instance.)

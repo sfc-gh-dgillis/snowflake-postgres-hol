@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 5 - Query $live and $changes
+-- Step 5 - Query $live and $changes
 --
 -- $live: the latest committed Postgres state (~30s behind) on top of the
 --        target table, regardless of refresh_interval. Not transactional:
@@ -25,7 +25,7 @@ SELECT
     (SELECT COUNT(*) FROM <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.DEVICES$live) AS devices_live;
 
 -- The UPDATE appears as a delete/insert pair sharing one _XID.
--- (The lab-3 column DDL started a fresh DEVICES$changes feed, so only
+-- (The step 3 column DDL started a fresh DEVICES$changes feed, so only
 -- changes made after the rename are listed.)
 SELECT _COMMIT_TIME, _XID, _CHANGE_TYPE, _IS_UPDATE, DEVICE_ID, DEVICE_NAME, STATUS
 FROM <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.DEVICES$changes
@@ -37,7 +37,7 @@ FROM <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.READ
 ORDER BY _COMMIT_LSN DESC, _LSN DESC
 LIMIT 20;
 
--- The deletes from lab-4 are in the change feed
+-- The deletes from step 4 are in the change feed
 SELECT _CHANGE_TYPE, COUNT(*) AS change_rows
 FROM <% ctx.env.MIRROR_TARGET_DATABASE_NAME %>.<% ctx.env.PG_SCHEMA_NAME %>.READINGS$changes
 GROUP BY _CHANGE_TYPE

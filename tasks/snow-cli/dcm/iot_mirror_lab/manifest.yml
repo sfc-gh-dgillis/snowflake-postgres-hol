@@ -1,4 +1,4 @@
-# DCM project iot_mirror_lab: the Snowflake objects the lab needs before lab-1.
+# DCM project iot_mirror_lab: the Snowflake objects the lab needs before step 1.
 #
 #   lab database and schema, the notebook stage, the warehouse (when the lab owns it),
 #   the analyst role and its grants, and in create mode the POSTGRES_INGRESS network rule
@@ -6,7 +6,7 @@
 #
 # The Postgres instance, the mirror, and its grants are not DCM object types; the tasks
 # create them (pg_instance.py, mirror_check.py, sql/mirror/). iot_mirror_analytics
-# (../iot_mirror_analytics) is deployed in lab-7 and purged before this project.
+# (../iot_mirror_analytics) is deployed in step 7 and purged before this project.
 #
 # .env/mirror.env is the single source of truth. pyutil/dcm/dcm.py passes the project
 # identifier (DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA.DCM_SETUP_PROJECT_NAME) and every

@@ -289,7 +289,7 @@ def count_line(poller: Poller, pg: int, base: Optional[int], live: Optional[int]
 def cmd_grant_mirror_admin(_args: argparse.Namespace) -> None:
     """Give MIRROR_ADMIN_ROLE_NAME the postgres_mirror_admin application role.
 
-    Runs during setup (demo-up / infrastructure-up), not in lab-1: on a new
+    Runs during setup (demo-up / infrastructure-up), not in step 1: on a new
     account the snowflake application can take up to an hour to appear, and
     that is better found before the session than in the middle of it.
 
@@ -388,7 +388,7 @@ def cmd_create_mirror(args: argparse.Namespace) -> None:
     if "permission denied to create extension" in lowered or ("extension" in lowered and "permission" in lowered):
         raise LabError("The instance predates mirroring and needs a refresh. There is no SQL for this: open "
                        f"Snowsight > Postgres > {env('PG_INSTANCE_NAME')} > Manage, run the refresh/update "
-                       "action, then re-run `task lab-1-create-mirror`.")
+                       "action, then re-run `task step-1-create-mirror`.")
     if "already exists" in lowered or "reuse" in lowered or "previously" in lowered:
         raise LabError("The target database name is taken or was used by an earlier mirror. Names can "
                        "never be reused: bump MIRROR_TARGET_DATABASE_NAME, then re-run the step.")
@@ -726,7 +726,7 @@ def cmd_setup_status(_args: argparse.Namespace) -> None:
     not_ready = [item for item, status, _ in results if status in ("FAIL", "WAIT")]
     if not_ready:
         raise LabError(f"{len(not_ready)} check(s) not passing; fix them, then run `task setup-status` again.")
-    print("\n✓ Setup is ready. Next: task lab-1-create-mirror")
+    print("\n✓ Setup is ready. Next: task step-1-create-mirror")
 
 
 def main() -> int:

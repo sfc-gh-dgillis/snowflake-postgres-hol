@@ -1,8 +1,8 @@
 -- Analyst role.
 --
--- Reads mirrored data once lab-1 grants it the mirror's <TARGET>_ADMIN database role
+-- Reads mirrored data once step 1 grants it the mirror's <TARGET>_ADMIN database role
 -- (sql/mirror/003-grant_analyst_read.sql; the target database is created by
--- CREATE_MIRROR, so that grant cannot live here), and the lab-7 analytics
+-- CREATE_MIRROR, so that grant cannot live here), and the step 7 analytics
 -- (iot_mirror_analytics). Granted to the user running the lab so the notebook can switch
 -- to it.
 

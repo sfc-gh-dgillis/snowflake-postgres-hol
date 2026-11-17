@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 7 - Verify the analytics layer   (Snowflake)
+-- Step 7 - Verify the analytics layer   (Snowflake)
 --
 -- Query the analytics layer built on the mirror.
 -- ========================================================================

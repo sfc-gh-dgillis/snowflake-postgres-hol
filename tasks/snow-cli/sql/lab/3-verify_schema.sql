@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 3 - Verify schema changes in Snowflake
+-- Step 3 - Verify schema changes in Snowflake
 --
 -- Expect the new STATUS column and LOCATION renamed to SITE_LOCATION.
 -- No mirror reconfiguration was needed: DDL is applied promptly,

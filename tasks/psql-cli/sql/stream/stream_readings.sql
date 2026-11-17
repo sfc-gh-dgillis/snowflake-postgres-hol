@@ -9,7 +9,7 @@
 --
 -- Watch it land in Snowflake while it runs: READINGS$live trails Postgres
 -- by ~30 seconds, while READINGS only moves on each refresh interval.
--- Press Ctrl+C to stop early. Don't run lab-2 or lab-4 while it is running:
+-- Press Ctrl+C to stop early. Don't run steps 2 or 4 while it is running:
 -- their checks wait for row counts to match.
 -- ========================================================================
 

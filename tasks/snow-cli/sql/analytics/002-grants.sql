@@ -1,8 +1,8 @@
 -- ========================================================================
--- 002-grants.sql   (Snowflake, lab-7)
+-- 002-grants.sql   (Snowflake, step 7)
 --
 -- The analyst role already reads the mirrored tables through the
--- <TARGET>_ADMIN database role (lab-1), and the dynamic table and semantic
+-- <TARGET>_ADMIN database role (step 1), and the dynamic table and semantic
 -- view through the DCM project iot_mirror_analytics; here it gets the agent,
 -- which DCM does not manage.
 -- ========================================================================

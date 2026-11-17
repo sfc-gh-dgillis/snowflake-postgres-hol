@@ -1,5 +1,5 @@
 -- ========================================================================
--- 002-create_mirror.sql   (Snowflake, lab-1)
+-- 002-create_mirror.sql   (Snowflake, step 1)
 --
 -- One call sets up the whole pipeline:
 --   * in Postgres: a publication, a logical replication slot, and a CDC

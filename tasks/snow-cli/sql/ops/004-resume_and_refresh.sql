@@ -1,5 +1,5 @@
 -- ========================================================================
--- 004-resume_and_refresh.sql   (Snowflake, lab-6)
+-- 004-resume_and_refresh.sql   (Snowflake, step 6)
 --
 -- RESUME_MIRROR restarts the apply task in place, after checking that the
 -- unapplied operations are still on the source (it raises RESTART_REQUIRED

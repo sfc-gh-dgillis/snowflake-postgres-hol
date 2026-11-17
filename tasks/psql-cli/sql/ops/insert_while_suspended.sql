@@ -1,5 +1,5 @@
 -- ========================================================================
--- insert_while_suspended.sql   (Postgres, lab-6)
+-- insert_while_suspended.sql   (Postgres, step 6)
 --
 -- 100 new readings written while the mirror's apply task is suspended.
 -- ========================================================================

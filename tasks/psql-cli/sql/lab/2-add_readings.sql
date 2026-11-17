@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 2 - Add more data   (Postgres)
+-- Step 2 - Add more data   (Postgres)
 --
 -- Insert 500 additional readings with varied sensor data spread over the
 -- last 24 hours, then watch them replicate to Snowflake.

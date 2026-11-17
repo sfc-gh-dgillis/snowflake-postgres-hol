@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 3 - Schema changes   (Postgres)
+-- Step 3 - Schema changes   (Postgres)
 --
 -- Postgres Mirror supports schema evolution: DDL on the source propagates
 -- to the Snowflake target without reconfiguring the mirror.

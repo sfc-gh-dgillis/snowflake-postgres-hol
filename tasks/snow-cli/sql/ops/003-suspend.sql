@@ -1,5 +1,5 @@
 -- ========================================================================
--- 003-suspend.sql   (Snowflake, lab-6)
+-- 003-suspend.sql   (Snowflake, step 6)
 --
 -- SUSPEND_MIRROR stops scheduling new apply runs (an in-flight run
 -- finishes). Postgres keeps capturing changes, so nothing is lost while the

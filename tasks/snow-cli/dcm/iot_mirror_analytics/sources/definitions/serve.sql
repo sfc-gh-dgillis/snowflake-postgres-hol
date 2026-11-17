@@ -1,7 +1,7 @@
 -- A semantic layer over the mirrored tables: business-friendly dimensions and metrics
--- that Cortex Analyst (and the lab-7 agent) turn into SQL. Because it reads the target
+-- that Cortex Analyst (and the step 7 agent) turn into SQL. Because it reads the target
 -- tables, answers are as fresh as the mirror. Uses SITE_LOCATION and STATUS, so run
--- lab-3 (schema changes) first.
+-- step 3 (schema changes) first.
 -- See: https://docs.snowflake.com/en/sql-reference/sql/create-semantic-view
 
 DEFINE SEMANTIC VIEW {{ lab_database }}.{{ lab_schema }}.{{ semantic_view }}

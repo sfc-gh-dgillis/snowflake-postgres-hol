@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 2 - Monitor sync in Snowflake
+-- Step 2 - Monitor sync in Snowflake
 --
 -- READINGS (the target table) moves on each refresh_interval; READINGS$live
 -- shows new rows within ~30 seconds. apply_lag_seconds is how far the

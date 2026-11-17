@@ -59,7 +59,7 @@ tasks:
       - task: banner
         vars:
           TITLE: 'Setup complete: the IoT tables are live in Postgres.'
-          TEXT: 'Next: task lab-1-create-mirror  (and open the notebook link above in Snowsight)'
+          TEXT: 'Next: task step-1-create-mirror  (and open the notebook link above in Snowsight)'
 
   infrastructure-up:
     desc: Provisions the Postgres instance and Snowflake lab objects only (routes by POSTGRES_INSTANCE_MODE), then checks readiness.
@@ -74,7 +74,7 @@ tasks:
     cmds:
       - task: dcm-setup-up
       # Before the slow instance create: a missing snowflake application (new
-      # accounts, up to an hour) should fail setup, not lab-1.
+      # accounts, up to an hour) should fail setup, not step 1.
       - task: lab:grant-mirror-admin
       # After the deploy: CREATE POSTGRES INSTANCE attaches the network policy it defined.
       - task: snow-cli:pg-instance-create
@@ -109,12 +109,12 @@ tasks:
   # Lab steps (run in order)
   # ------------------------------------------------------------------
 
-  lab-1-create-mirror:
-    desc: 'Lab 1: grants, pre-flight checks, CREATE_MIRROR, initial snapshot, confirm the data.'
+  step-1-create-mirror:
+    desc: 'Step 1: grants, pre-flight checks, CREATE_MIRROR, initial snapshot, confirm the data.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 1 - Create the mirror'
+          TITLE: 'Step 1 - Create the mirror'
           TEXT: 'One procedure call replicates devices, sensors and readings into Snowflake.'
       - task: psql-cli:preflight
       - task: snow-cli:mirror-grants
@@ -132,12 +132,12 @@ tasks:
           SQL_FILE: sql/lab/1-confirm_data.sql
       - task: psql-cli:inspect-mirror-objects
 
-  lab-2-add-data:
-    desc: 'Lab 2: insert 500 readings in Postgres; watch $live, then the target table, catch up.'
+  step-2-add-data:
+    desc: 'Step 2: insert 500 readings in Postgres; watch $live, then the target table, catch up.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 2 - Add more data and monitor sync'
+          TITLE: 'Step 2 - Add more data and monitor sync'
           TEXT: 'Watch $live pick up the rows within ~30s; READINGS follows on the next apply run.'
       - task: psql-cli:run-sql-file
         vars:
@@ -149,12 +149,12 @@ tasks:
         vars:
           SQL_FILE: sql/lab/2-verify_sync.sql
 
-  lab-3-schema-changes:
-    desc: 'Lab 3: add a column and rename another in Postgres; the mirror applies the DDL.'
+  step-3-schema-changes:
+    desc: 'Step 3: add a column and rename another in Postgres; the mirror applies the DDL.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 3 - Schema changes through the mirror'
+          TITLE: 'Step 3 - Schema changes through the mirror'
           TEXT: 'ADD COLUMN status and RENAME location TO site_location, with no mirror changes.'
       - task: psql-cli:run-sql-file
         vars:
@@ -169,12 +169,12 @@ tasks:
         vars:
           SQL_FILE: sql/lab/3-verify_schema.sql
 
-  lab-4-deletes:
-    desc: 'Lab 4: delete readings older than 12 hours; the deletes replicate.'
+  step-4-deletes:
+    desc: 'Step 4: delete readings older than 12 hours; the deletes replicate.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 4 - Deletes'
+          TITLE: 'Step 4 - Deletes'
           TEXT: 'Deleted rows leave the target table; READINGS$changes keeps a record of them.'
       - task: psql-cli:run-sql-file
         vars:
@@ -186,12 +186,12 @@ tasks:
         vars:
           SQL_FILE: sql/lab/4-verify_deletes.sql
 
-  lab-5-live-and-changes:
-    desc: 'Lab 5: low-latency reads with $live and the 7-day change feed with $changes.'
+  step-5-live-and-changes:
+    desc: 'Step 5: low-latency reads with $live and the 7-day change feed with $changes.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 5 - $live and $changes'
+          TITLE: 'Step 5 - $live and $changes'
           TEXT: 'A new device shows up in DEVICES$live before the DEVICES table is updated.'
       - task: psql-cli:run-sql-file
         vars:
@@ -203,12 +203,12 @@ tasks:
         vars:
           SQL_FILE: sql/lab/5-live_and_changes.sql
 
-  lab-6-operate-mirror:
-    desc: 'Lab 6: ALTER_MIRROR (interval, add a table), SUSPEND/RESUME, REFRESH_MIRROR, monitoring.'
+  step-6-operate-mirror:
+    desc: 'Step 6: ALTER_MIRROR (interval, add a table), SUSPEND/RESUME, REFRESH_MIRROR, monitoring.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 6 - Operate the mirror'
+          TITLE: 'Step 6 - Operate the mirror'
           TEXT: 'Change the refresh interval, add a new table, pause and resume apply, and monitor.'
       - task: snow-cli:run-sql-file
         vars:
@@ -228,7 +228,7 @@ tasks:
           WAIT: 'true'
       - task: banner
         vars:
-          TITLE: 'Lab 6 - Suspend the mirror, then write to Postgres'
+          TITLE: 'Step 6 - Suspend the mirror, then write to Postgres'
           TEXT: 'Postgres keeps capturing changes while apply is paused; nothing is lost.'
       - task: snow-cli:run-sql-file
         vars:
@@ -242,7 +242,7 @@ tasks:
           SECONDS: '90'
       - task: banner
         vars:
-          TITLE: 'Lab 6 - Resume the mirror and apply now'
+          TITLE: 'Step 6 - Resume the mirror and apply now'
       - task: snow-cli:run-sql-file
         vars:
           SQL_FILE: sql/ops/004-resume_and_refresh.sql
@@ -256,18 +256,18 @@ tasks:
         vars:
           SQL_FILE: sql/ops/monitoring.sql
 
-  lab-7-analytics:
-    desc: 'Lab 7: dynamic table and semantic view (DCM project iot_mirror_analytics) and a Cortex Agent on the mirrored data.'
+  step-7-analytics:
+    desc: 'Step 7: dynamic table and semantic view (DCM project iot_mirror_analytics) and a Cortex Agent on the mirrored data.'
     cmds:
       - task: banner
         vars:
-          TITLE: 'Lab 7 - Analytics on mirrored data'
+          TITLE: 'Step 7 - Analytics on mirrored data'
           TEXT: 'Mirrored tables are ordinary Snowflake tables: build pipelines and AI on them directly.'
       # The dynamic table and semantic view (DCM), then the agent DCM does not manage
       - task: snow-cli:dcm-up
         vars:
           DCM_PROJECT: iot_mirror_analytics
-          DCM_ALIAS: lab-7
+          DCM_ALIAS: step 7
       - task: snow-cli:sort-and-process-sql-folder
         vars:
           SQL_SORT_PROCESS_DIR: sql/analytics
@@ -279,16 +279,16 @@ tasks:
           TITLE: 'Ask the agent in Snowsight: AI & ML > Agents'
           TEXT: 'Which site had the highest average temperature in the last 12 hours?'
 
-  lab-all:
-    desc: Runs lab-1 through lab-7 in order (presenter dry run / smoke test).
+  step-all:
+    desc: Runs steps 1 through 7 in order (presenter dry run / smoke test).
     cmds:
-      - task: lab-1-create-mirror
-      - task: lab-2-add-data
-      - task: lab-3-schema-changes
-      - task: lab-4-deletes
-      - task: lab-5-live-and-changes
-      - task: lab-6-operate-mirror
-      - task: lab-7-analytics
+      - task: step-1-create-mirror
+      - task: step-2-add-data
+      - task: step-3-schema-changes
+      - task: step-4-deletes
+      - task: step-5-live-and-changes
+      - task: step-6-operate-mirror
+      - task: step-7-analytics
 
   # ------------------------------------------------------------------
   # Utilities
@@ -320,7 +320,7 @@ tasks:
       - task: lab:refresh
 
   mirror-resume:
-    desc: Resumes a suspended mirror and applies pending changes (e.g. if lab-6 was interrupted).
+    desc: Resumes a suspended mirror and applies pending changes (e.g. if step 6 was interrupted).
     cmds:
       - task: snow-cli:run-sql-file
         vars:
@@ -355,14 +355,14 @@ tasks:
           DCM_PROJECT: iot_mirror_lab
 
   analytics-plan:
-    desc: Shows what DCM would create, alter, or drop for the lab-7 analytics (project iot_mirror_analytics; needs lab-1 and lab-3). Applies nothing.
+    desc: Shows what DCM would create, alter, or drop for the step 7 analytics (project iot_mirror_analytics; needs steps 1 and 3). Applies nothing.
     cmds:
       - task: snow-cli:dcm-plan
         vars:
           DCM_PROJECT: iot_mirror_analytics
 
   dcm-analyze:
-    desc: Validates both DCM projects' definitions (iot_mirror_analytics needs lab-1 and lab-3). Applies nothing.
+    desc: Validates both DCM projects' definitions (iot_mirror_analytics needs steps 1 and 3). Applies nothing.
     cmds:
       - task: snow-cli:dcm-analyze
         vars:

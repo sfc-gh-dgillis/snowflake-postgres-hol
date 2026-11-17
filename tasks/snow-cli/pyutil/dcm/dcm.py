@@ -5,7 +5,7 @@ dcm - runs the lab's DCM (Database Change Management) projects with the snow CLI
 Two projects, one folder each under tasks/snow-cli/dcm/:
   iot_mirror_lab        setup: lab database / schema / stage, warehouse, analyst role,
                         and (create mode) the Postgres ingress network rule and policy
-  iot_mirror_analytics  lab-7: dynamic table and semantic view on the mirrored tables;
+  iot_mirror_analytics  step 7: dynamic table and semantic view on the mirrored tables;
                         deployed after iot_mirror_lab and purged before it
 
 .env/mirror.env is the single source of truth. Every command passes the project

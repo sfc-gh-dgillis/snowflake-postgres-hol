@@ -25,7 +25,7 @@ tasks:
   #   iot_mirror_lab        setup: lab database / schema / stage, warehouse,
   #                         analyst role, and (create mode) the Postgres
   #                         ingress network rule and policy
-  #   iot_mirror_analytics  lab-7: dynamic table and semantic view on the
+  #   iot_mirror_analytics  step 7: dynamic table and semantic view on the
   #                         mirrored tables, so it is deployed second and
   #                         purged first
   #

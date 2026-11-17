@@ -1,5 +1,5 @@
 -- ========================================================================
--- 001-alter_refresh_interval.sql   (Snowflake, lab-6)
+-- 001-alter_refresh_interval.sql   (Snowflake, step 6)
 --
 -- ALTER_MIRROR changes the apply cadence in place. A shorter interval keeps
 -- the target tables fresher with more, smaller apply runs; a longer one

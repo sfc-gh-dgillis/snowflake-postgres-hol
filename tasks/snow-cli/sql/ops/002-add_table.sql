@@ -1,5 +1,5 @@
 -- ========================================================================
--- 002-add_table.sql   (Snowflake, lab-6)
+-- 002-add_table.sql   (Snowflake, step 6)
 --
 -- The mirror uses table-level scope, so a new Postgres table stays
 -- un-mirrored until you add it. Adding a table triggers its initial

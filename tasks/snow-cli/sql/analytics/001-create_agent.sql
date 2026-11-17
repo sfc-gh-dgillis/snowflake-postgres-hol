@@ -1,5 +1,5 @@
 -- ========================================================================
--- 001-create_agent.sql   (Snowflake, lab-7)
+-- 001-create_agent.sql   (Snowflake, step 7)
 --
 -- A Cortex Agent that answers questions about the mirrored IoT data through
 -- the semantic view. Cortex Agents require Enterprise Edition or higher.

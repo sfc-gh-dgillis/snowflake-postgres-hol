@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 4 - Verify deletes in Snowflake
+-- Step 4 - Verify deletes in Snowflake
 --
 -- The deleted readings are gone from the target table, but READINGS$changes
 -- keeps a 7-day record of them. _CHANGE_TYPE is S (initial snapshot),

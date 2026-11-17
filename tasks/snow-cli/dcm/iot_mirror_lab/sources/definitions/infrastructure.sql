@@ -1,9 +1,9 @@
 -- Lab foundation: the lab database and schema, the notebook stage, and the warehouse.
 --
 -- The lab database holds lab-owned objects: the Postgres ingress network rule
--- (network.sql), the notebook and its stage, and the lab-7 analytics (DCM project
+-- (network.sql), the notebook and its stage, and the step 7 analytics (DCM project
 -- iot_mirror_analytics, plus the agent created outside DCM). The mirror's target
--- database is NOT defined here: CREATE_MIRROR creates it in lab-1, and it must not
+-- database is NOT defined here: CREATE_MIRROR creates it in step 1, and it must not
 -- exist beforehand.
 --
 -- ROLES: the project deploys as MIRROR_ADMIN_ROLE_NAME (ACCOUNTADMIN by default) to
@@ -24,7 +24,7 @@ DEFINE STAGE {{ lab_database }}.{{ lab_schema }}.{{ lab_stage }}
     ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     COMMENT = '{{ lab_stage_comment }}';
 
--- Runs lab queries, the notebook, and the lab-7 dynamic table. The mirror's apply task
+-- Runs lab queries, the notebook, and the step 7 dynamic table. The mirror's apply task
 -- does NOT use it: apply runs on serverless compute.
 --
 -- Defined only when the lab owns it (DEMO_WAREHOUSE_MANAGED=true): a purge drops every

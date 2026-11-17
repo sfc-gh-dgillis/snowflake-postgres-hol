@@ -1,5 +1,5 @@
 -- ========================================================================
--- 005-restore_refresh_interval.sql   (Snowflake, lab-6)
+-- 005-restore_refresh_interval.sql   (Snowflake, step 6)
 --
 -- Return to the configured cadence (MIRROR_REFRESH_INTERVAL).
 -- ========================================================================

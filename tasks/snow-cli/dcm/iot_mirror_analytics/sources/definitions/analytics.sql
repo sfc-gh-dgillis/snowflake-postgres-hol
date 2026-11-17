@@ -4,7 +4,7 @@
 -- Postgres changes.
 --
 -- End-to-end freshness = mirror refresh_interval + TARGET_LAG.
--- Uses SITE_LOCATION, so run lab-3 (schema changes) first.
+-- Uses SITE_LOCATION, so run step 3 (schema changes) first.
 
 DEFINE DYNAMIC TABLE {{ lab_database }}.{{ lab_schema }}.{{ dynamic_table }}
     TARGET_LAG = '1 minute'

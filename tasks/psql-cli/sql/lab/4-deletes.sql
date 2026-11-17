@@ -1,5 +1,5 @@
 -- ========================================================================
--- Lab 4 - Deletes   (Postgres)
+-- Step 4 - Deletes   (Postgres)
 --
 -- Deletes replicate too: the rows disappear from the Snowflake target table
 -- on the next apply run, and READINGS$changes keeps a record of them.
