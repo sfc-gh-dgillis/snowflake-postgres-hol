@@ -27,7 +27,7 @@ This lab automates the setup with Task:
 - **Secure connection setup:** credentials go to `~/.pgpass` (mode 600) and are never displayed. A `POSTGRES_INGRESS` network policy is scoped to your IP, and connections use `sslmode=verify-ca`.
 - **Snowflake objects as code:** the lab database, warehouse, analyst role, network policy, and lab-7 analytics are declared in two DCM (Database Change Management) projects, deployed and purged as a whole
 - **Seven lab steps:** each runs SQL in Postgres, waits for the mirror, and shows the Snowflake side
-- **Companion notebook:** generated from a template and deployed to Snowsight for the Snowflake-side exploration
+- **Companion notebook:** generated from a template and uploaded to a personal Snowflake Workspace (`USER$.PUBLIC.<DEMO_NOTEBOOK_NAME>`) as a Notebook in Workspaces, for the Snowflake-side exploration
 - **Extras:** a `psql` load generator, mirror operations (`ALTER`/`SUSPEND`/`RESUME`/`REFRESH`), and a dynamic table, semantic view, and Cortex Agent on the mirrored data
 
 ## Quick Start
@@ -53,7 +53,7 @@ task lab-7-analytics           # extra: build on the mirrored data
 task demo-teardown
 ```
 
-Open the notebook URL that `demo-up` prints in Snowsight and keep it next to your terminal: the terminal changes Postgres, and the notebook explores the same change in Snowflake.
+Open the notebook URL that `demo-up` prints in Snowsight and keep it next to your terminal: the terminal changes Postgres, and the notebook explores the same change in Snowflake. The first time you run it, Snowsight asks you to connect the notebook to a notebook service (it runs on Container Runtime; SQL still uses the lab warehouse).
 
 ### How It Routes
 
@@ -62,7 +62,7 @@ Open the notebook URL that `demo-up` prints in Snowsight and keep it next to you
 | | `create` (default) | `existing` |
 |---|---|---|
 | **demo-up** | Deploys the DCM project `iot_mirror_lab` (lab objects plus a `POSTGRES_INGRESS` network policy for your IP), grants `postgres_mirror_admin`, and creates a new `STANDARD_M` instance (`STANDARD_L` on Azure). Saves the connection without displaying secrets. Ends with a readiness checklist. | Deploys `iot_mirror_lab` (lab objects only), grants `postgres_mirror_admin`, and checks an instance you already own: READY (resumed if suspended) and owned by `MIRROR_ADMIN_ROLE_NAME`. Saves its service entry. Never touches its network policy. Ends with a readiness checklist. |
-| **demo-teardown** | Purges both DCM projects (lab objects, network policy, the warehouse if the lab owns it), and drops the mirror, the **instance**, and the local connection entries | Purges both DCM projects, and drops the mirror and **only the tables this lab created**. Keeps your instance and connection. |
+| **demo-teardown** | Purges both DCM projects (lab objects, network policy, the warehouse if the lab owns it), and drops the mirror, the **instance**, the local connection entries, and the notebook workspace | Purges both DCM projects, and drops the mirror, the notebook workspace, and **only the tables this lab created**. Keeps your instance and connection. |
 
 Override the mode for a single run from your shell:
 
@@ -325,7 +325,7 @@ snowflake-postgres-hol/
 |   +-- snow-cli/                      # Everything that runs against Snowflake
 |   |   +-- snowcli-tasks.yml
 |   |   +-- snowflake.yml              # Defaults for optional <% ctx.env.X %> placeholders
-|   |   +-- cmd/                       # Notebook generate/deploy scripts
+|   |   +-- cmd/                       # Notebook generate scripts
 |   |   +-- dcm/                       # DCM projects: manifest.yml + sources/definitions/*.sql
 |   |   |   +-- iot_mirror_lab/        # Setup: lab DB/schema/stage, warehouse, analyst role, ingress policy
 |   |   |   +-- iot_mirror_analytics/  # lab-7: dynamic table, semantic view, analyst grants
@@ -333,6 +333,7 @@ snowflake-postgres-hol/
 |   |   |   +-- dcm/                   # Runs snow dcm with the identifier and -D variables from .env
 |   |   |   +-- snowclisp/             # Runs NNN-*.sql files in order with snow
 |   |   |   +-- pginstance/            # Instance lifecycle; writes ~/.pgpass, never prints secrets
+|   |   |   +-- notebook/              # Uploads the notebook to its workspace; prints its URL; drops it
 |   |   +-- sql/
 |   |   |   +-- init/                  # Home schema for the DCM project objects
 |   |   |   +-- mirror/                # 001 grants, 002 CREATE_MIRROR, 003 analyst read access
@@ -340,7 +341,7 @@ snowflake-postgres-hol/
 |   |   |   +-- ops/                   # lab-6: ALTER / SUSPEND / RESUME / REFRESH, monitoring
 |   |   |   +-- analytics/             # lab-7: Cortex Agent and its grant (not a DCM object type)
 |   |   +-- notebook/mirror_lab_notebook/
-|   |       +-- templates/             # Notebook + snowflake.yml templates
+|   |       +-- templates/             # Notebook template
 |   |       +-- variables.json         # Placeholder -> env var mapping
 |   |       +-- generated/             # Rendered notebook (git-ignored)
 |   +-- psql-cli/                      # Everything that runs against Postgres

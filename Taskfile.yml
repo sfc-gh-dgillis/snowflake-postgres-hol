@@ -383,7 +383,7 @@ tasks:
 
   demo-teardown:
     desc: Tears down the lab (routes by POSTGRES_INSTANCE_MODE).
-    prompt: This purges both DCM projects (the lab database, the analyst role, and the warehouse if the lab owns it) and drops the mirror and its target database (create mode also drops the Postgres instance and network policy). Continue?
+    prompt: This purges both DCM projects (the lab database, the analyst role, and the warehouse if the lab owns it), drops the notebook workspace, and drops the mirror and its target database (create mode also drops the Postgres instance and network policy). Continue?
     cmds:
       - task: validate-prerequisites:env
         vars:
@@ -395,7 +395,7 @@ tasks:
           TEXT: 'Target database names can never be reused: bump MIRROR_TARGET_DATABASE_NAME before the next demo-up.'
 
   demo-teardown-create:
-    desc: Purges iot_mirror_analytics, drops the mirror and the Postgres instance, purges iot_mirror_lab (lab objects and network policy), and removes local connection entries.
+    desc: Purges iot_mirror_analytics, drops the mirror and the Postgres instance, purges iot_mirror_lab (lab objects and network policy), removes local connection entries, and drops the notebook workspace.
     internal: true
     cmds:
       - task: dcm-analytics-down
@@ -404,15 +404,17 @@ tasks:
       # After the instance: an attached network policy cannot be dropped.
       - task: dcm-setup-down
       - task: snow-cli:pg-instance-forget
+      - task: snow-cli:notebook-drop
 
   demo-teardown-existing:
-    desc: Purges iot_mirror_analytics, drops the mirror and the lab's Postgres tables, and purges iot_mirror_lab; keeps your instance and connection.
+    desc: Purges iot_mirror_analytics, drops the mirror and the lab's Postgres tables, purges iot_mirror_lab, and drops the notebook workspace; keeps your instance and connection.
     internal: true
     cmds:
       - task: dcm-analytics-down
       - task: lab:drop-mirror
       - task: psql-cli:drop-lab-tables
       - task: dcm-setup-down
+      - task: snow-cli:notebook-drop
 
   # iot_mirror_analytics reads iot_mirror_lab's schema, so it is purged first.
   # The project home (DCM_PROJECT_DATABASE.DCM_PROJECT_SCHEMA) is left in place.

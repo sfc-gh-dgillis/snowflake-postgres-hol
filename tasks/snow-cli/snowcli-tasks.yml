@@ -185,15 +185,23 @@ tasks:
       - cmd/generate-notebook-generic.sh "{{.TEMPLATE_FILE}}" "{{.OUTPUT_FILE}}" "{{.VARIABLES_FILE}}"
 
   deploy-notebook:
-    desc: Deploys the generated notebook to Snowflake using the Snow CLI.
+    desc: Uploads the generated notebook to the lab's personal workspace (Notebooks in Workspaces).
     internal: true
     vars:
-      PROJECT_DIR: '{{.PROJECT_DIR | default "notebook/mirror_lab_notebook/generated"}}'
+      NOTEBOOK_FILE: '{{.NOTEBOOK_FILE | default "notebook/mirror_lab_notebook/generated/mirror_lab_notebook.ipynb"}}'
     cmds:
-      - cmd/deploy-notebook.sh "{{.PROJECT_DIR}}"
+      - python3 pyutil/notebook/workspace_notebook.py deploy "{{.NOTEBOOK_FILE}}"
 
   notebook-url:
     desc: Prints the Snowsight URL of the deployed notebook.
     internal: true
+    vars:
+      NOTEBOOK_FILE: '{{.NOTEBOOK_FILE | default "notebook/mirror_lab_notebook/generated/mirror_lab_notebook.ipynb"}}'
     cmds:
-      - snow notebook get-url "$DEMO_NOTEBOOK_NAME" --database "$DEMO_DATABASE_NAME" --schema "$DEMO_SCHEMA_NAME" --connection "$CLI_CONNECTION_NAME"
+      - python3 pyutil/notebook/workspace_notebook.py url "{{.NOTEBOOK_FILE}}"
+
+  notebook-drop:
+    desc: Drops the lab's notebook workspace.
+    internal: true
+    cmds:
+      - python3 pyutil/notebook/workspace_notebook.py drop --yes

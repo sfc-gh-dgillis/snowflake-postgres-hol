@@ -1,6 +1,5 @@
 {
   "description": "Variable mapping for mirror_lab_notebook template generation. Each variable maps a Jinja placeholder to an environment variable. Values come from .env/mirror.env (the single source of truth); a missing env var is a hard error.",
-  "snowflake_yml_template": "templates/mirror_lab_snowflake_yml_template.yml",
   "variables": {
     "admin_role_name": {
       "env": "MIRROR_ADMIN_ROLE_NAME"
